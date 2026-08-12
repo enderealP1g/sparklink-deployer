@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "host": {
+    "name": "example-la-01",
+    "direct_domain": "origin.example.com",
+    "cdn_domain": "cdn-origin.example.com",
+    "acme_email": "admin@example.com",
+    "ssh_port": 22
+  },
+  "ports": {
+    "reality": 443,
+    "anytls": 9443,
+    "cdn_origin": 2053,
+    "cdn_loopback": 10080,
+    "warp_socks": 40000,
+    "warp_health": 40002
+  },
+  "reality": {
+    "target": "www.cloudflare.com:443",
+    "server_names": ["www.cloudflare.com"]
+  },
+  "firewall": {
+    "mode": "ufw",
+    "allow_http_for_acme": true
+  },
+  "cloudflare": {
+    "managed_externally": true,
+    "expected_origin_tls": "strict",
+    "expected_cache": "bypass"
+  }
+}

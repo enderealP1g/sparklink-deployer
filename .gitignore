@@ -1,0 +1,30 @@
+# Runtime configuration and secrets
+config/host.json
+*.env
+*.secret
+*.secrets.json
+secrets.json
+warp-account.json
+warp-profile.json
+
+# Rendered/private output
+build/
+dist/
+artifacts/private/
+private/
+delivery/
+*.tgz
+*.tar.gz
+*.zip
+
+# Python/editor state
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.idea/
+.vscode/
+
+# Planning stays local and is never published
+.planning/

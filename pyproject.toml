@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sparklink-deployer"
+version = "0.1.0a1"
+description = "Plan-first Origin and HyTru deployment orchestrator"
+requires-python = ">=3.12"
+license = {text = "Proprietary"}
+authors = [{name = "enderealP1g"}]
+
+[project.scripts]
+sparklinkctl = "sparklink_deployer.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

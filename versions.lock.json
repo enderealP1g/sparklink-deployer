@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "xray": {
+    "version": "26.7.28",
+    "archive": "Xray-linux-64.zip",
+    "sha256": "8195d909f1109b8f3d99eefe401a3c451d7bf4af71f24d3815420f77e5dd2a40",
+    "release_base": "https://github.com/XTLS/Xray-core/releases/download/v26.7.28"
+  },
+  "sing_box": {
+    "version": "1.13.16",
+    "archive": "sing-box-1.13.16-linux-amd64.tar.gz",
+    "sha256": "e37c312859dfa84cba148f41072ff6369f08361ae91d622dc1fd3aab49611a8d",
+    "release_base": "https://github.com/SagerNet/sing-box/releases/download/v1.13.16"
+  },
+  "wireproxy": {
+    "version": "1.1.3",
+    "archive": "wireproxy_linux_amd64.tar.gz",
+    "sha256": "e88c1d090740373fc606c1bafd81d9a5eadc642cce5667616e20e9d7a444f51c",
+    "release_base": "https://github.com/windtf/wireproxy/releases/download/v1.1.3"
+  }
+}
