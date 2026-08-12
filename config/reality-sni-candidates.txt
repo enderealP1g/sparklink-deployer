@@ -1,0 +1,8 @@
+# Starter candidates only. Edit this list for the VPS region and user network.
+# The scanner validates repeated public TLS/443 reachability; it does not guarantee
+# end-to-end REALITY performance until the deployed node is tested from the real client.
+www.microsoft.com
+www.apple.com
+www.amazon.com
+www.cloudflare.com
+www.bing.com

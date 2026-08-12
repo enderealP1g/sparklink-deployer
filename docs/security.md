@@ -30,3 +30,7 @@ tree so historical hostnames cannot accidentally return in examples.
   reputation or account safety.
 - The initial alpha is not production-accepted until a disposable VPS, isolated client,
   independent firewall probe, and reboot retest all pass.
+- Imported SNI reports are untrusted measurements, contain no executable content, and do
+  not override configuration without an interactive recommendation confirmation.
+- Future VeilShift Cloudflare credentials remain local-controller-only. They must never be
+  copied to a VPS, accepted as a command-line argument, logged, or committed.

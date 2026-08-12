@@ -6,6 +6,7 @@ config/host.json
 secrets.json
 warp-account.json
 warp-profile.json
+*.sni-report.json
 
 # Rendered/private output
 build/

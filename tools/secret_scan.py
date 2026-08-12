@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 EXCLUDED_PARTS = {".git", ".planning", "build", "dist", "__pycache__", ".venv"}
-TEXT_SUFFIXES = {".py", ".sh", ".md", ".json", ".toml", ".yml", ".yaml", ".txt", ""}
+TEXT_SUFFIXES = {".py", ".sh", ".ps1", ".md", ".json", ".toml", ".yml", ".yaml", ".txt", ""}
 DUMMY_UUIDS = {
     "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",

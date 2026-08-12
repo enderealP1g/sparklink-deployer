@@ -8,11 +8,13 @@ from pathlib import Path
 
 from . import __version__
 from .deploy import install, rollback
-from .model import ConfigError, DeploymentConfig
+from .model import ConfigError, DeploymentConfig, split_host_port
 from .preflight import planned_changes, run_preflight
 from .render import render_bundle
 from .secrets_store import DeploymentSecrets
+from .sni_scan import format_scan_report, load_candidates, scan_candidates
 from .verify import verify_runtime, verify_structure
+from .wizard import prepare_install_config
 
 
 def project_root() -> Path:
@@ -33,6 +35,25 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--config", type=Path, required=True)
     render.add_argument("--output", type=Path, required=True)
     render.add_argument("--allow-dummy", action="store_true", required=True)
+
+    scan = subparsers.add_parser("reality-scan", help="rank public TLS/443 targets from this network")
+    scan.add_argument("--config", type=Path)
+    scan.add_argument("--candidates", type=Path)
+    scan.add_argument("--candidate", action="append", default=[])
+    scan.add_argument("--attempts", type=int, default=3)
+    scan.add_argument("--timeout", type=float, default=5.0)
+    scan.add_argument("--vantage", default="local")
+    scan.add_argument("--output", type=Path)
+    scan.add_argument("--json", action="store_true")
+
+    prepare = subparsers.add_parser("prepare-install", help="interactively prepare domains and REALITY SNI")
+    prepare.add_argument("--config", type=Path, required=True)
+    prepare.add_argument("--output", type=Path, required=True)
+    prepare.add_argument("--candidates", type=Path)
+    prepare.add_argument("--local-report", type=Path)
+    prepare.add_argument("--vps-report", type=Path)
+    prepare.add_argument("--attempts", type=int, default=3)
+    prepare.add_argument("--timeout", type=float, default=5.0)
 
     install_parser = subparsers.add_parser("install", help="install on a fresh supported VPS")
     install_parser.add_argument("--config", type=Path, required=True)
@@ -57,7 +78,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"rollback completed for transaction {args.transaction}")
             return 0
 
+        if args.command == "reality-scan":
+            return _scan(args)
+
         config = DeploymentConfig.load(args.config)
+        if args.command == "prepare-install":
+            if not sys.stdin.isatty():
+                raise RuntimeError("prepare-install requires an interactive terminal")
+            prepare_install_config(
+                config,
+                args.output,
+                candidates_path=args.candidates,
+                local_report_path=args.local_report,
+                vps_report_path=args.vps_report,
+                attempts=args.attempts,
+                timeout=args.timeout,
+            )
+            return 0
         if args.command == "plan":
             return _plan(config, args.vps, args.json)
         if args.command == "render-example":
@@ -82,6 +119,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     return 2
+
+
+def _scan(args: argparse.Namespace) -> int:
+    default = None
+    if args.config:
+        config = DeploymentConfig.load(args.config)
+        default, _ = split_host_port(config.reality.target)
+    candidates = load_candidates(args.candidates, args.candidate, default)
+    report = scan_candidates(
+        candidates,
+        vantage=args.vantage,
+        attempts=args.attempts,
+        timeout=args.timeout,
+    )
+    if args.output:
+        report.write(args.output)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+    else:
+        print(format_scan_report(report))
+        if args.output:
+            print(f"Report written to {args.output}")
+    return 0 if any(result.eligible for result in report.results) else 1
 
 
 def _plan(config: DeploymentConfig, strict_vps: bool, as_json: bool) -> int:

@@ -24,6 +24,12 @@ class ShellEntrypointTests(unittest.TestCase):
         self.assertIn("Type INSTALL", text)
         self.assertIn("plan --config", text)
 
+    def test_windows_entrypoint_is_project_local(self) -> None:
+        text = (ROOT / "sparklinkctl.ps1").read_text(encoding="utf-8")
+        self.assertIn("$ErrorActionPreference = 'Stop'", text)
+        self.assertIn("PYTHONPATH", text)
+        self.assertNotIn("SetEnvironmentVariable", text)
+
 
 if __name__ == "__main__":
     unittest.main()

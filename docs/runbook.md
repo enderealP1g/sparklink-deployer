@@ -5,6 +5,8 @@
 - Use a fresh Ubuntu 24.04 x86_64 VPS with console/rescue access.
 - Confirm the intended SSH port and keep the existing SSH session open.
 - Complete the Cloudflare handoff and verify both DNS records.
+- Optionally create a current local SNI report, then select `auto`, a manual hostname, or
+  the configured default in the install wizard. Treat reports older than seven days as stale.
 - Run `sparklinkctl plan` and retain its output.
 - Do not proceed if the preflight reports an existing proxy stack or a port collision.
 
