@@ -25,3 +25,6 @@ jobs:
         run: python tools/secret_scan.py .
       - name: Shell syntax
         run: bash -n install.sh sparklinkctl
+      - name: PowerShell entrypoint
+        shell: pwsh
+        run: ./sparklinkctl.ps1 --version
