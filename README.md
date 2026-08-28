@@ -17,8 +17,8 @@ optional fallback on the same VPS, not host-level failover. Hysteria2 is Custom-
 renders a parameterized sing-box UDP/QUIC listener with separate Native/HyTru identities;
 real client and reboot acceptance is still required before production use.
 
-Version 0.4 adds capability profiles, Custom HY2 rendering, and a read-only existing-host
-manager on top of the REALITY target-selection extension. It
+Version 0.4 adds capability profiles, Custom HY2 rendering, and read-only existing-host
+inventory/adoption planning on top of the REALITY target-selection extension. It
 can scan candidate SNI targets
 from the user's computer, scan them again from the VPS, combine both reports, and let the
 user accept the recommendation, enter a hostname manually, or keep the configured default.
@@ -32,8 +32,8 @@ run and a full reboot retest.
 
 The current installer still refuses to mutate an existing x-ui/3x-ui, Xray, sing-box, or
 custom Nginx installation. The read-only `inventory-collect` and `adopt-plan` commands can
-now record known SparkLink host layouts, report capability gaps, and write a redacted local
-manager inventory. A future `adopt-apply` remains per-host and approval-gated.
+now record recognized host layouts, report capability gaps, and write a redacted local host
+inventory. A future `adopt-apply` remains frozen and, if ever approved, must be per-host.
 
 ## Safe workflow
 
@@ -81,18 +81,21 @@ VPS:
 
 ```powershell
 python -m sparklink_deployer.cli inventory-collect --target racknerd-admin `
-  --name racknerd-ny-01 --provider RackNerd --output build\manager\racknerd.inventory.json `
-  --manager-root .
+  --name racknerd-ny-01 --provider RackNerd --output build\inventory\racknerd.inventory.json `
+  --inventory-root .
 python -m sparklink_deployer.cli adopt-plan `
-  --inventory build\manager\racknerd.inventory.json `
-  --output build\manager\racknerd.adopt-plan.json `
-  --manager-root .
-python -m sparklink_deployer.cli manager-status --manager-root .
+  --inventory build\inventory\racknerd.inventory.json `
+  --output build\inventory\racknerd.adopt-plan.json `
+  --inventory-root .
+python -m sparklink_deployer.cli inventory-status --inventory-root .
 ```
 
 See [REALITY target selection](docs/reality-sni.md) for scoring and limitations. Future
 VeilShift™ controller boundaries are documented in [the roadmap](docs/veilshift-roadmap.md);
 Cloudflare Global API Key reading is intentionally not implemented in this release.
+
+Product vocabulary and system boundaries are consolidated in [docs/product](docs/product/README.md);
+they intentionally reserve Control Plane schema and orchestration design for a future product phase.
 
 See `docs/architecture.md`, `docs/cloudflare-manual.md`, and `docs/runbook.md` before a
 real deployment.

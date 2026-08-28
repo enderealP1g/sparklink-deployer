@@ -19,7 +19,8 @@ For the three existing VPSes, use the normal Windows SSH aliases with
 paths, and SHA-256 fingerprints only; it does not read configuration bodies or secrets and
 does not restart anything. Review `adopt-plan` output before considering any migration.
 RackNerd/x-ui, VMISS/x-ui plus sing-box/WireProxy, and DediRock systemd layouts are
-reported separately. There is no generic `adopt-apply` yet.
+reported separately as recognized layouts. There is no generic `adopt-apply`; a recognized
+host is not thereby registered with a future Control Plane.
 
 ## Acceptance
 

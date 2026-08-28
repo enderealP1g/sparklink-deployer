@@ -10,8 +10,8 @@ from sparklink_deployer.inventory import (
     HostObservation,
     build_adoption_plan,
     load_inventory,
-    load_manager_inventories,
-    write_manager_inventory,
+    load_local_inventories,
+    write_local_inventory,
 )
 
 
@@ -78,14 +78,14 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("egress-hytru-warp", vmiss.capabilities())
         self.assertNotIn("hysteria2", vmiss.capabilities())
 
-    def test_sparklink_descriptor_marks_managed_host(self) -> None:
+    def test_sparklink_descriptor_marks_deployer_host(self) -> None:
         raw = self.fixture("dedirock")
         raw["markers"].append("sparklink_descriptor")
         raw["observed_capabilities"] = ["xray-reality-vision", "egress-native"]
         observation = HostObservation.from_dict(raw)
         plan = build_adoption_plan(observation)
-        self.assertEqual(observation.family(), "sparklink-managed")
-        self.assertEqual(plan.status, "managed")
+        self.assertEqual(observation.family(), "sparklink-deployed")
+        self.assertEqual(plan.status, "deployer-ready")
 
     def test_adoption_plan_is_read_only_and_reports_gaps(self) -> None:
         observation = HostObservation.from_dict(self.fixture("racknerd"))
@@ -102,18 +102,18 @@ class InventoryTests(unittest.TestCase):
             source = Path(raw_dir) / "input.json"
             source.write_text(json.dumps(raw), encoding="utf-8")
             loaded = load_inventory(source)
-            destination = write_manager_inventory(loaded, Path(raw_dir) / "manager")
+            destination = write_local_inventory(loaded, Path(raw_dir) / "inventory")
             text = destination.read_text(encoding="utf-8")
             self.assertNotIn("do-not-store", text)
             self.assertNotIn("subscription_token", text)
 
-    def test_manager_inventory_round_trip(self) -> None:
+    def test_local_inventory_round_trip(self) -> None:
         observation = HostObservation.from_dict(self.fixture("vmiss"))
         with tempfile.TemporaryDirectory() as raw_dir:
-            manager_root = Path(raw_dir)
-            path = write_manager_inventory(observation, manager_root)
+            inventory_root = Path(raw_dir)
+            path = write_local_inventory(observation, inventory_root)
             self.assertTrue(path.is_file())
-            loaded = load_manager_inventories(manager_root)
+            loaded = load_local_inventories(inventory_root)
             self.assertEqual([item.name for item in loaded], ["vmiss-01"])
 
     def test_remote_collection_uses_stdin_python_and_no_mutating_command(self) -> None:

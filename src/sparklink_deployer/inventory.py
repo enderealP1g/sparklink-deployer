@@ -17,7 +17,7 @@ SENSITIVE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 KNOWN_FAMILIES = {
-    "sparklink-managed",
+    "sparklink-deployed",
     "known-xui-xray",
     "known-xui-xray-singbox",
     "known-systemd-xray-singbox",
@@ -166,7 +166,7 @@ class HostObservation:
 
     def family(self) -> str:
         if "sparklink_descriptor" in self.markers:
-            return "sparklink-managed"
+            return "sparklink-deployed"
         has_xui = "xui" in self.markers
         has_xray = self.has_service("xray") or "xray_config" in self.markers
         has_singbox = self.has_service("sing-box") or "sing_box_config" in self.markers
@@ -190,7 +190,7 @@ class AdoptionPlan:
     detected_capabilities: tuple[str, ...]
     compatible_capabilities: tuple[str, ...]
     gaps: tuple[str, ...]
-    unmanaged_capabilities: tuple[str, ...]
+    additional_capabilities: tuple[str, ...]
     risks: tuple[str, ...]
     backup_points: tuple[str, ...]
     actions: tuple[str, ...]
@@ -207,7 +207,7 @@ class AdoptionPlan:
                 "detected": list(self.detected_capabilities),
                 "compatible": list(self.compatible_capabilities),
                 "gaps": list(self.gaps),
-                "unmanaged": list(self.unmanaged_capabilities),
+                "additional_detected": list(self.additional_capabilities),
             },
             "risks": list(self.risks),
             "backup_points": list(self.backup_points),
@@ -223,10 +223,10 @@ def build_adoption_plan(
     detected = observation.capabilities()
     compatible = tuple(sorted(set(desired).intersection(detected)))
     gaps = tuple(sorted(set(desired).difference(detected)))
-    unmanaged = tuple(sorted(set(detected).difference(desired)))
+    additional = tuple(sorted(set(detected).difference(desired)))
     risks: list[str] = []
-    if observation.family() == "sparklink-managed":
-        risks.append("host already exposes a SparkLink descriptor; verify state instead of migrating blindly")
+    if observation.family() == "sparklink-deployed":
+        risks.append("host already exposes a SparkLink deployment descriptor; verify state instead of migrating blindly")
     if observation.family() == "unknown":
         risks.append("host layout is not a known SparkLink family; adoption is blocked")
     if "xui" in observation.markers:
@@ -252,8 +252,8 @@ def build_adoption_plan(
         "obtain explicit per-host approval before any adopt-apply implementation is used",
         "repeat service, listener, client, egress, and reboot acceptance after migration",
     ]
-    if observation.family() == "sparklink-managed":
-        status = "managed"
+    if observation.family() == "sparklink-deployed":
+        status = "deployer-ready"
     elif observation.family() in KNOWN_FAMILIES:
         status = "review-required"
     else:
@@ -266,7 +266,7 @@ def build_adoption_plan(
         detected_capabilities=detected,
         compatible_capabilities=compatible,
         gaps=gaps,
-        unmanaged_capabilities=unmanaged,
+        additional_capabilities=additional,
         risks=tuple(risks),
         backup_points=tuple(backup_points),
         actions=tuple(actions),
@@ -288,14 +288,14 @@ def write_inventory(observation: HostObservation, path: Path) -> None:
     path.write_text(json.dumps(redact_secrets(observation.to_dict()), indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
-def write_manager_inventory(observation: HostObservation, manager_root: Path) -> Path:
-    destination = manager_root / ".sparklink" / "hosts" / observation.name / "inventory.json"
+def write_local_inventory(observation: HostObservation, inventory_root: Path) -> Path:
+    destination = inventory_root / ".sparklink" / "hosts" / observation.name / "inventory.json"
     write_inventory(observation, destination)
     return destination
 
 
-def load_manager_inventories(manager_root: Path) -> tuple[HostObservation, ...]:
-    root = manager_root / ".sparklink" / "hosts"
+def load_local_inventories(inventory_root: Path) -> tuple[HostObservation, ...]:
+    root = inventory_root / ".sparklink" / "hosts"
     if not root.is_dir():
         return ()
     observations: list[HostObservation] = []
