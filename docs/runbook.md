@@ -12,6 +12,15 @@
 - Run `sparklinkctl plan` and retain its output.
 - Do not proceed if the preflight reports an existing proxy stack or a port collision.
 
+## Existing-host inventory
+
+For the three existing VPSes, use the normal Windows SSH aliases with
+`inventory-collect`. The collector reads OS, binary/service state, listeners, known marker
+paths, and SHA-256 fingerprints only; it does not read configuration bodies or secrets and
+does not restart anything. Review `adopt-plan` output before considering any migration.
+RackNerd/x-ui, VMISS/x-ui plus sing-box/WireProxy, and DediRock systemd layouts are
+reported separately. There is no generic `adopt-apply` yet.
+
 ## Acceptance
 
 Server checks are necessary but not sufficient:
@@ -23,6 +32,10 @@ Server checks are necessary but not sufficient:
 5. Every generated private client entry completes its intended real request from an isolated client.
 6. When CDN is selected, a non-Cloudflare source cannot connect to the CDN origin port.
 7. Reboot the VPS and repeat the applicable checks from a new SSH session.
+
+Hysteria2 is Custom-only. Its rendered sing-box UDP/QUIC listener and Salamander obfuscation
+are structurally checked, but real client connectivity, UDP behavior, and reboot recovery
+must be accepted on a disposable host before production rollout.
 
 ## Rollback
 

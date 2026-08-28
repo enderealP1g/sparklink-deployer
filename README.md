@@ -13,10 +13,12 @@ The default Recommended profile is:
   or delivered as a default public entry.
 
 CDN VLESS/WebSocket, active AnyTLS, and Hysteria2 are Custom capabilities. CDN is an
-optional fallback on the same VPS, not host-level failover. Hysteria2 is cataloged for
-Custom but its portable renderer remains reserved for the next capability PR.
+optional fallback on the same VPS, not host-level failover. Hysteria2 is Custom-only and
+renders a parameterized sing-box UDP/QUIC listener with separate Native/HyTru identities;
+real client and reboot acceptance is still required before production use.
 
-Version 0.3 adds capability profiles on top of the REALITY target-selection extension. It
+Version 0.4 adds capability profiles, Custom HY2 rendering, and a read-only existing-host
+manager on top of the REALITY target-selection extension. It
 can scan candidate SNI targets
 from the user's computer, scan them again from the VPS, combine both reports, and let the
 user accept the recommendation, enter a hostname manually, or keep the configured default.
@@ -28,9 +30,10 @@ individually validated. The local renderer, model checks, secret boundaries, and
 are ready. Production installation remains gated on a disposable fresh VPS acceptance
 run and a full reboot retest.
 
-The current installer still refuses to adopt an existing x-ui/3x-ui, Xray, sing-box, or
-custom Nginx installation. A future `adopt-plan` workflow will inspect only known
-SparkLink host layouts before any approved migration.
+The current installer still refuses to mutate an existing x-ui/3x-ui, Xray, sing-box, or
+custom Nginx installation. The read-only `inventory-collect` and `adopt-plan` commands can
+now record known SparkLink host layouts, report capability gaps, and write a redacted local
+manager inventory. A future `adopt-apply` remains per-host and approval-gated.
 
 ## Safe workflow
 
@@ -71,6 +74,21 @@ SparkLink host layouts before any approved migration.
 7. Run server verification, reboot, then run verification again from a new SSH session.
 8. Review the redacted node descriptor at `/var/lib/sparklink/public/node-descriptor.json`
    and import only the generated private delivery entries into an isolated client profile.
+
+For an existing known host, collect only redacted facts through its normal Windows SSH
+alias, then review the local plan. These commands do not restart services or write to the
+VPS:
+
+```powershell
+python -m sparklink_deployer.cli inventory-collect --target racknerd-admin `
+  --name racknerd-ny-01 --provider RackNerd --output build\manager\racknerd.inventory.json `
+  --manager-root .
+python -m sparklink_deployer.cli adopt-plan `
+  --inventory build\manager\racknerd.inventory.json `
+  --output build\manager\racknerd.adopt-plan.json `
+  --manager-root .
+python -m sparklink_deployer.cli manager-status --manager-root .
+```
 
 See [REALITY target selection](docs/reality-sni.md) for scoring and limitations. Future
 VeilShift™ controller boundaries are documented in [the roadmap](docs/veilshift-roadmap.md);

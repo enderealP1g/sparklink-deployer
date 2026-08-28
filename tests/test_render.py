@@ -111,6 +111,43 @@ class RenderTests(unittest.TestCase):
             self.assertFalse((output / "etc/nginx").exists())
             self.assertTrue((output / "etc/systemd/system/sparklink-wireproxy.service").exists())
 
+    def test_custom_hysteria2_renders_udp_inbound_and_links(self) -> None:
+        raw = json.loads((ROOT / "config" / "host.example.json").read_text(encoding="utf-8"))
+        raw["profile"] = {
+            "mode": "custom",
+            "capabilities": ["hysteria2", "egress-native", "egress-hytru-warp"],
+            "primary_core": "xray",
+            "standby_cores": [],
+        }
+        config = DeploymentConfig.from_dict(raw)
+        value = build_sing_box(config, self.secret)
+        inbound = next(item for item in value["inbounds"] if item["tag"] == "hysteria2-in")
+        self.assertEqual(inbound["type"], "hysteria2")
+        self.assertEqual(inbound["listen_port"], 8443)
+        self.assertEqual(inbound["obfs"]["type"], "salamander")
+        self.assertTrue(any(rule.get("auth_user") == ["hytru-hy2"] for rule in value["route"]["rules"]))
+        links = build_client_links(config, self.secret)
+        self.assertEqual(len(links), 2)
+        self.assertTrue(all(link.startswith("hysteria2://") for link in links))
+
+    def test_hysteria2_bundle_includes_singbox_and_udp_delivery(self) -> None:
+        raw = json.loads((ROOT / "config" / "host.example.json").read_text(encoding="utf-8"))
+        raw["profile"] = {
+            "mode": "custom",
+            "capabilities": ["hysteria2", "egress-native"],
+            "primary_core": "xray",
+            "standby_cores": [],
+        }
+        config = DeploymentConfig.from_dict(raw)
+        with tempfile.TemporaryDirectory() as raw_dir:
+            output = Path(raw_dir)
+            render_bundle(config, self.secret, output, include_private=True)
+            self.assertTrue((output / "etc/sing-box/config.json").exists())
+            links = (output / "var/lib/sparklink/private/delivery/client-links.txt").read_text(encoding="utf-8")
+            self.assertEqual(len(links.splitlines()), 1)
+            self.assertTrue(links.startswith("hysteria2://"))
+            self.assertTrue(all(result.passed for result in verify_structure(config, self.secret)))
+
 
 if __name__ == "__main__":
     unittest.main()

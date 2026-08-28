@@ -153,8 +153,6 @@ def _linux_checks(config: DeploymentConfig) -> list[Check]:
         target_host, target_port = split_host_port(config.reality.target)
         tls_ok, tls_detail = _tls_probe(target_host, target_port)
         checks.append(Check("reality-target-tls", tls_ok, tls_detail))
-    if config.profile.has("hysteria2"):
-        checks.append(Check("hysteria2-renderer", False, "HY2 is reserved for the PR3 parameterized renderer"))
     return checks
 
 

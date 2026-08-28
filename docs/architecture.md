@@ -9,6 +9,16 @@ add active AnyTLS, CDN fallback, or the Custom-only Hysteria2 capability.
 sing-box is installed and configuration-checked as a standby core in Recommended, but its
 public listener remains disabled until explicitly selected in Custom.
 
+## Existing-host manager boundary
+
+The local controller can collect a redacted inventory over the operator's existing SSH
+alias and produce an `adopt-plan`. The report distinguishes the known x-ui/Xray,
+x-ui/Xray/sing-box, and systemd Xray/sing-box families, records config fingerprints and
+listeners, and lists capability gaps and backup points. It is deliberately not a generic
+migration renderer: an `adopt-apply` must be a separately approved, host-specific adapter
+with a transaction journal. The manager stores only inventory and descriptors under
+`.sparklink/hosts`; SSH keys, subscriptions, and runtime secrets remain outside the repo.
+
 ## Traffic paths
 
 Each protocol has two credentials. Authentication identity selects the exit; it does not

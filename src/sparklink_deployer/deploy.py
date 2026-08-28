@@ -85,7 +85,10 @@ def install(config: DeploymentConfig, project_root: Path, assume_yes: bool) -> s
 
         secure_stage = staging / "secure"
         secure_stage.mkdir(mode=0o700)
-        private_key, public_key = generate_reality_keypair(Path("/usr/local/bin/xray"))
+        if config.profile.requires_xray:
+            private_key, public_key = generate_reality_keypair(Path("/usr/local/bin/xray"))
+        else:
+            private_key, public_key = "", ""
         secrets = DeploymentSecrets.generate(private_key, public_key)
         secrets_path = secure_stage / "secrets.json"
         secrets.write(secrets_path)

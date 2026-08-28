@@ -45,6 +45,14 @@ class CliTests(unittest.TestCase):
         self.assertIn('"singbox_state": "standby"', value)
         self.assertNotIn("PRIVATE_KEY_PLACEHOLDER", value)
 
+    def test_manager_status_is_read_only_when_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            output = StringIO()
+            with redirect_stdout(output):
+                result = main(["manager-status", "--manager-root", raw])
+            self.assertEqual(result, 0)
+            self.assertIn("No local manager inventories", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

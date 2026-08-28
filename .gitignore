@@ -29,3 +29,6 @@ __pycache__/
 
 # Planning stays local and is never published
 .planning/
+
+# Local manager inventory (host labels, endpoints, and fingerprints)
+.sparklink/

@@ -55,7 +55,7 @@ def verify_structure(config: DeploymentConfig, secret: DeploymentSecrets) -> lis
             )
         )
     anytls = next((item for item in sing_box["inbounds"] if item.get("tag") == "anytls-in"), None)
-    if config.profile.active_singbox or "sing-box" in config.profile.standby_cores:
+    if config.profile.has("singbox-anytls") or "sing-box" in config.profile.standby_cores:
         expected_users = set()
         if config.profile.has("egress-native"):
             expected_users.add("origin-anytls")
@@ -74,6 +74,42 @@ def verify_structure(config: DeploymentConfig, secret: DeploymentSecrets) -> lis
                     "singbox-hytru-routing",
                     any(rule.get("auth_user") == ["hytru-anytls"] for rule in sing_box["route"]["rules"]),
                     "HyTru AnyTLS routes to WireProxy",
+                )
+            )
+    if config.profile.has("hysteria2"):
+        hysteria2 = next((item for item in sing_box["inbounds"] if item.get("tag") == "hysteria2-in"), None)
+        expected_users = set()
+        if config.profile.has("egress-native"):
+            expected_users.add("origin-hy2")
+        if config.profile.has("egress-hytru-warp"):
+            expected_users.add("hytru-hy2")
+        results.append(
+            Verification(
+                "hysteria2-inbound",
+                hysteria2 is not None
+                and hysteria2.get("listen_port") == config.ports.hysteria2
+                and {user["name"] for user in hysteria2.get("users", [])} == expected_users,
+                "selected Hysteria2 identities and UDP port",
+            )
+        )
+        results.append(
+            Verification(
+                "hysteria2-obfs",
+                hysteria2 is not None and hysteria2.get("obfs", {}).get("type") == "salamander",
+                "Hysteria2 Salamander obfuscation",
+            )
+        )
+        if config.profile.has("egress-hytru-warp"):
+            results.append(
+                Verification(
+                    "singbox-hytru-hy2-routing",
+                    any(
+                        rule.get("inbound") == ["hysteria2-in"]
+                        and rule.get("auth_user") == ["hytru-hy2"]
+                        and rule.get("outbound") == "warp"
+                        for rule in sing_box["route"]["rules"]
+                    ),
+                    "HyTru Hysteria2 routes to WireProxy",
                 )
             )
     return results

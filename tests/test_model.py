@@ -54,8 +54,8 @@ class ModelTests(unittest.TestCase):
 
         raw["profile"]["mode"] = "custom"
         raw["profile"]["capabilities"] = ["hysteria2", "egress-native"]
-        with self.assertRaisesRegex(ConfigError, "PR3 renderer"):
-            DeploymentConfig.from_dict(raw)
+        config = DeploymentConfig.from_dict(raw)
+        self.assertTrue(config.profile.has("hysteria2"))
 
     def test_catalog_has_stable_pr2_ids(self) -> None:
         ids = {spec.capability_id for spec in CAPABILITY_CATALOG}
