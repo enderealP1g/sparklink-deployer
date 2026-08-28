@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sparklink-deployer"
-version = "0.2.0a1"
-description = "Plan-first Origin and HyTru deployment orchestrator"
+version = "0.3.0a1"
+description = "Plan-first capability-driven SparkLink VPS deployment orchestrator"
 requires-python = ">=3.12"
 license = {text = "Proprietary"}
 authors = [{name = "enderealP1g"}]

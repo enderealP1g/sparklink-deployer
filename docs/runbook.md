@@ -4,7 +4,9 @@
 
 - Use a fresh Ubuntu 24.04 x86_64 VPS with console/rescue access.
 - Confirm the intended SSH port and keep the existing SSH session open.
-- Complete the Cloudflare handoff and verify both DNS records.
+- Select Recommended or Custom. Only enable CDN when a CDN fallback is actually needed;
+  only enable active AnyTLS when it is intended as a user-facing entry.
+- Complete the Cloudflare handoff only for a selected CDN capability and verify its DNS record.
 - Optionally create a current local SNI report, then select `auto`, a manual hostname, or
   the configured default in the install wizard. Treat reports older than seven days as stale.
 - Run `sparklinkctl plan` and retain its output.
@@ -14,13 +16,13 @@
 
 Server checks are necessary but not sufficient:
 
-1. Xray, sing-box, Nginx, WireProxy, watchdog timer, and Certbot timer are active/enabled.
-2. Xray, sing-box, and Nginx configuration syntax checks pass.
-3. WireProxy readiness is healthy; TCP and SOCKS5 UDP pass; Cloudflare trace says `warp=on`.
+1. Every selected service is active/enabled; standby sing-box is installed but intentionally stopped.
+2. Every rendered core and selected reverse proxy configuration passes syntax checks.
+3. When HyTru is selected, WireProxy readiness is healthy; TCP and SOCKS5 UDP pass; Cloudflare trace says `warp=on`.
 4. Native and HyTru exits differ. Native is the VPS exit; HyTru is treated as dynamic.
-5. All six private client entries complete real TCP and UDP requests from an isolated client.
-6. A non-Cloudflare source cannot connect to the CDN origin port.
-7. Reboot the VPS and repeat steps 1 through 6 from a new SSH session.
+5. Every generated private client entry completes its intended real request from an isolated client.
+6. When CDN is selected, a non-Cloudflare source cannot connect to the CDN origin port.
+7. Reboot the VPS and repeat the applicable checks from a new SSH session.
 
 ## Rollback
 

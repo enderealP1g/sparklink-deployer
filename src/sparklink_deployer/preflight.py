@@ -37,19 +37,29 @@ class PreflightReport:
 
 
 def planned_changes(config: DeploymentConfig) -> list[str]:
-    return [
-        "install pinned Xray, sing-box, WireProxy, Nginx, Certbot and required utilities",
+    changes = [
+        "install only the pinned binaries and packages required by the selected capabilities",
         f"open SSH TCP/{config.host.ssh_port} before enabling UFW",
-        f"open VLESS REALITY TCP/{config.ports.reality}",
-        f"open AnyTLS TCP/{config.ports.anytls}",
-        f"restrict CDN origin TCP/{config.ports.cdn_origin} to official Cloudflare ranges",
-        "generate six independent client identities and one WARP identity as root-only files",
-        "install dedicated xray, sing-box and certificate-access system users/groups",
-        "install Xray, sing-box, WireProxy and watchdog systemd units",
-        "obtain a two-hostname certificate with Certbot and install a renewal hook",
-        "write private delivery links below /var/lib/sparklink/private/delivery",
-        "record every touched file and firewall baseline in a transaction backup",
     ]
+    if config.profile.has("xray-reality-vision"):
+        changes.append(f"open VLESS REALITY TCP/{config.ports.reality}")
+    if config.profile.has("singbox-anytls"):
+        changes.append(f"open AnyTLS TCP/{config.ports.anytls}")
+    if config.profile.has("hysteria2"):
+        changes.append(f"open Hysteria2 UDP/{config.ports.hysteria2}")
+    if config.profile.has("cdn-vless-ws"):
+        changes.append(f"restrict CDN origin TCP/{config.ports.cdn_origin} to official Cloudflare ranges")
+    changes.append("generate only the selected client identities as root-only files")
+    changes.append("install dedicated xray, sing-box and certificate-access system users/groups")
+    if config.profile.requires_warp:
+        changes.append("install WireProxy and the HyTru readiness watchdog")
+    if config.profile.requires_certificate:
+        changes.append("obtain the selected hostname certificate with Certbot and install a renewal hook")
+    changes.append("write the selected public node descriptor and private delivery links")
+    changes.append(
+        "record every touched file and firewall baseline in a transaction backup",
+    )
+    return changes
 
 
 def run_preflight(config: DeploymentConfig, strict_host: bool) -> PreflightReport:
@@ -100,22 +110,25 @@ def _linux_checks(config: DeploymentConfig) -> list[Check]:
     checks.append(Check("fresh-host", not conflicts, "conflicts=" + ",".join(conflicts) if conflicts else "clean"))
 
     listeners = _listeners()
-    intended = {
-        config.host.ssh_port,
-        config.ports.reality,
-        config.ports.anytls,
-        config.ports.cdn_origin,
-        config.ports.cdn_loopback,
-        config.ports.warp_socks,
-        config.ports.warp_health,
-    }
+    intended = {config.host.ssh_port}
+    if config.profile.has("xray-reality-vision"):
+        intended.add(config.ports.reality)
+    if config.profile.has("singbox-anytls"):
+        intended.add(config.ports.anytls)
+    if config.profile.has("hysteria2"):
+        intended.add(config.ports.hysteria2)
+    if config.profile.has("cdn-vless-ws"):
+        intended.update({config.ports.cdn_origin, config.ports.cdn_loopback})
+    if config.profile.requires_warp:
+        intended.update({config.ports.warp_socks, config.ports.warp_health})
     occupied = sorted(intended.intersection(listeners).difference({config.host.ssh_port}))
     checks.append(Check("ports", not occupied, "occupied=" + ",".join(map(str, occupied)) if occupied else "available"))
 
     direct_addresses = _resolve(config.host.direct_domain)
     checks.append(Check("direct-dns", bool(direct_addresses), f"answers={len(direct_addresses)}"))
-    cdn_addresses = _resolve(config.host.cdn_domain)
-    checks.append(Check("cdn-dns", bool(cdn_addresses), f"answers={len(cdn_addresses)}"))
+    cdn_addresses = _resolve(config.host.cdn_domain) if config.profile.has("cdn-vless-ws") else set()
+    if config.profile.has("cdn-vless-ws"):
+        checks.append(Check("cdn-dns", bool(cdn_addresses), f"answers={len(cdn_addresses)}"))
     public_ipv4 = _native_public_ipv4()
     checks.append(Check("public-ip", bool(public_ipv4), "native IPv4 detected" if public_ipv4 else "unavailable"))
     checks.append(
@@ -125,19 +138,23 @@ def _linux_checks(config: DeploymentConfig) -> list[Check]:
             "direct hostname points to this VPS" if public_ipv4 in direct_addresses else "does not match native IPv4",
         )
     )
-    checks.append(
-        Check(
-            "cdn-certificate-phase",
-            bool(public_ipv4) and public_ipv4 in cdn_addresses,
-            "CDN hostname is DNS-only for certificate issuance"
-            if public_ipv4 in cdn_addresses
-            else "CDN must be DNS-only and point to this VPS before install",
+    if config.profile.has("cdn-vless-ws"):
+        checks.append(
+            Check(
+                "cdn-certificate-phase",
+                bool(public_ipv4) and public_ipv4 in cdn_addresses,
+                "CDN hostname is DNS-only for certificate issuance"
+                if public_ipv4 in cdn_addresses
+                else "CDN must be DNS-only and point to this VPS before install",
+            )
         )
-    )
 
-    target_host, target_port = split_host_port(config.reality.target)
-    tls_ok, tls_detail = _tls_probe(target_host, target_port)
-    checks.append(Check("reality-target-tls", tls_ok, tls_detail))
+    if config.profile.has("xray-reality-vision"):
+        target_host, target_port = split_host_port(config.reality.target)
+        tls_ok, tls_detail = _tls_probe(target_host, target_port)
+        checks.append(Check("reality-target-tls", tls_ok, tls_detail))
+    if config.profile.has("hysteria2"):
+        checks.append(Check("hysteria2-renderer", False, "HY2 is reserved for the PR3 parameterized renderer"))
     return checks
 
 

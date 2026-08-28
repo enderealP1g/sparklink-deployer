@@ -35,6 +35,16 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertFalse((Path(raw) / "var/lib/sparklink/private").exists())
 
+    def test_describe_is_credential_free_and_reports_recommended(self) -> None:
+        output = StringIO()
+        with redirect_stdout(output):
+            result = main(["describe", "--config", str(ROOT / "config" / "host.example.json")])
+        self.assertEqual(result, 0)
+        value = output.getvalue()
+        self.assertIn('"mode": "recommended"', value)
+        self.assertIn('"singbox_state": "standby"', value)
+        self.assertNotIn("PRIVATE_KEY_PLACEHOLDER", value)
+
 
 if __name__ == "__main__":
     unittest.main()

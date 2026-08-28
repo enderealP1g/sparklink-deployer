@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from .model import DeploymentConfig, split_host_port
+from .model import DEFAULT_RECOMMENDED_CAPABILITIES, DeploymentConfig, split_host_port
 from .sni_scan import (
     ScanReport,
     combine_reports,
@@ -44,23 +44,67 @@ def prepare_install_config(
 
     output_function("SparkLink interactive setup")
     output_function("Press Enter to keep the value shown in brackets.")
+    profile_raw = raw.get("profile") or {}
+    mode = _prompt_value("Deployment mode (recommended/custom)", str(profile_raw.get("mode", "recommended")), input_function).lower()
+    if mode not in {"recommended", "custom"}:
+        raise ValueError("deployment mode must be recommended or custom")
+    if mode == "recommended":
+        capabilities = list(DEFAULT_RECOMMENDED_CAPABILITIES)
+        standby_cores = ["sing-box"]
+        output_function("Recommended: Xray Reality with Native + HyTru/WARP; sing-box remains standby.")
+    else:
+        current = set(profile_raw.get("capabilities") or DEFAULT_RECOMMENDED_CAPABILITIES)
+        capabilities = []
+        for capability, label, default in (
+            ("xray-reality-vision", "Xray VLESS REALITY", "xray-reality-vision" in current),
+            ("egress-native", "Origin/Native egress", "egress-native" in current),
+            ("egress-hytru-warp", "HyTru/WARP egress", "egress-hytru-warp" in current),
+            ("singbox-anytls", "sing-box AnyTLS active ingress", "singbox-anytls" in current),
+            ("cdn-vless-ws", "VLESS CDN fallback", "cdn-vless-ws" in current),
+            ("hysteria2", "Hysteria2 weak-network capability", "hysteria2" in current),
+        ):
+            if _prompt_bool(label, default, input_function):
+                capabilities.append(capability)
+        if not capabilities:
+            raise ValueError("Custom must enable at least one capability")
+        standby_default = "sing-box" in (profile_raw.get("standby_cores") or ["sing-box"])
+        standby_cores = ["sing-box"] if _prompt_bool("Install sing-box as standby", standby_default, input_function) else []
+    profile_raw.update(
+        {
+            "mode": mode,
+            "capabilities": capabilities,
+            "primary_core": "xray",
+            "standby_cores": standby_cores,
+        }
+    )
+    raw["profile"] = profile_raw
     host["direct_domain"] = _prompt_value(
         "Direct DNS-only hostname", str(host["direct_domain"]), input_function
     )
-    host["cdn_domain"] = _prompt_value(
-        "CDN hostname (later proxied through Cloudflare)", str(host["cdn_domain"]), input_function
-    )
-    host["acme_email"] = _prompt_value("ACME email", str(host["acme_email"]), input_function)
+    if "cdn-vless-ws" in capabilities:
+        host["cdn_domain"] = _prompt_value(
+            "CDN hostname (later proxied through Cloudflare)", str(host.get("cdn_domain", "")), input_function
+        )
+    else:
+        host["cdn_domain"] = str(host.get("cdn_domain", ""))
+    if "cdn-vless-ws" in capabilities or "singbox-anytls" in capabilities or "hysteria2" in capabilities:
+        host["acme_email"] = _prompt_value("ACME email", str(host.get("acme_email", "")), input_function)
+    else:
+        host["acme_email"] = str(host.get("acme_email", ""))
 
-    default_sni, _ = split_host_port(config.reality.target)
-    answer = input_function(
-        f"REALITY SNI [default={default_sni}; type auto to scan; or enter a hostname]: "
-    ).strip()
-    selected = default_sni
-    if not answer:
+    if "xray-reality-vision" in capabilities:
+        default_sni, _ = split_host_port(config.reality.target)
+        answer = input_function(
+            f"REALITY SNI [default={default_sni}; type auto to scan; or enter a hostname]: "
+        ).strip()
+        selected = default_sni
+    else:
+        answer = ""
+        selected = ""
+    if "xray-reality-vision" in capabilities and not answer:
         output_function(f"Using configured default REALITY SNI: {default_sni}")
         _warn_known_cloudflare(default_sni, output_function)
-    elif answer.lower() == "auto":
+    elif "xray-reality-vision" in capabilities and answer.lower() == "auto":
         local_report = ScanReport.load(local_report_path) if local_report_path else None
         if local_report and local_report.age() > dt.timedelta(days=7):
             output_function(
@@ -94,15 +138,16 @@ def prepare_install_config(
                 selected = normalize_candidate(choice)
         else:
             output_function("No candidate passed the required checks; keeping the configured default.")
-    else:
+    elif "xray-reality-vision" in capabilities:
         selected = normalize_candidate(answer)
         output_function(f"Using manually selected REALITY SNI: {selected}")
         _warn_known_cloudflare(selected, output_function)
 
     reality = raw["reality"]
     assert isinstance(reality, dict)
-    reality["target"] = f"{selected}:443"
-    reality["server_names"] = [selected]
+    if selected:
+        reality["target"] = f"{selected}:443"
+        reality["server_names"] = [selected]
     prepared = DeploymentConfig.from_dict(raw)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
@@ -119,6 +164,18 @@ def prepare_install_config(
 def _prompt_value(label: str, current: str, input_function: InputFunction) -> str:
     value = input_function(f"{label} [{current}]: ").strip()
     return value or current
+
+
+def _prompt_bool(label: str, current: bool, input_function: InputFunction) -> bool:
+    default = "Y" if current else "N"
+    answer = input_function(f"{label} [Y/N; default={default}]: ").strip().lower()
+    if not answer:
+        return current
+    if answer in {"y", "yes", "1", "true"}:
+        return True
+    if answer in {"n", "no", "0", "false"}:
+        return False
+    raise ValueError(f"{label} expects Y or N")
 
 
 def _warn_known_cloudflare(hostname: str, output_function: OutputFunction) -> None:

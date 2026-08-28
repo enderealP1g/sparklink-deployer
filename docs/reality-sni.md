@@ -1,6 +1,6 @@
 # REALITY target selection
 
-SparkLink 0.2 treats REALITY target selection as a measured, user-confirmed choice.
+SparkLink 0.3 treats REALITY target selection as a measured, user-confirmed choice.
 It does not claim that a public list contains one globally best SNI.
 
 ## What is measured
@@ -42,7 +42,9 @@ sudo ./install.sh --config config/host.json \
   --local-sni-report build/sni/local.sni-report.json
 ```
 
-The installer asks for the direct hostname, CDN hostname, ACME email, and REALITY SNI:
+The installer first asks for Recommended or Custom and, for Custom, the capability set.
+It then asks for the direct hostname and only asks for CDN/ACME facts when a selected
+capability needs them. The REALITY SNI prompt remains:
 
 - Press Enter at the SNI prompt to keep the configured default.
 - Enter a hostname to use it manually.

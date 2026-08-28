@@ -23,7 +23,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RenderTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.config = DeploymentConfig.load(ROOT / "config" / "host.example.json")
+        example = json.loads((ROOT / "config" / "host.example.json").read_text(encoding="utf-8"))
+        example["profile"] = {
+            "mode": "custom",
+            "capabilities": [
+                "xray-reality-vision",
+                "egress-native",
+                "egress-hytru-warp",
+                "singbox-anytls",
+                "cdn-vless-ws",
+            ],
+            "primary_core": "xray",
+            "standby_cores": ["sing-box"],
+        }
+        self.config = DeploymentConfig.from_dict(example)
+        self.recommended = DeploymentConfig.load(ROOT / "config" / "host.example.json")
         self.secret = DeploymentSecrets.dummy()
         self.secret.validate()
 
@@ -82,6 +96,20 @@ class RenderTests(unittest.TestCase):
         results = verify_structure(self.config, self.secret)
         self.assertTrue(results)
         self.assertTrue(all(result.passed for result in results))
+
+    def test_recommended_only_exposes_reality_and_keeps_singbox_standby(self) -> None:
+        xray = build_xray(self.recommended, self.secret)
+        self.assertEqual({item["tag"] for item in xray["inbounds"]}, {"reality-in"})
+        singbox = build_sing_box(self.recommended, self.secret)
+        self.assertEqual({item["tag"] for item in singbox["inbounds"]}, {"anytls-in"})
+        self.assertEqual(len(build_client_links(self.recommended, self.secret)), 2)
+
+    def test_recommended_bundle_omits_cdn_and_nginx(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw)
+            render_bundle(self.recommended, self.secret, output, include_private=False)
+            self.assertFalse((output / "etc/nginx").exists())
+            self.assertTrue((output / "etc/systemd/system/sparklink-wireproxy.service").exists())
 
 
 if __name__ == "__main__":

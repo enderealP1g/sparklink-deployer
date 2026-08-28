@@ -17,7 +17,7 @@ class WizardTests(unittest.TestCase):
         self.config = DeploymentConfig.load(ROOT / "config" / "host.example.json")
 
     def test_blank_sni_keeps_default(self) -> None:
-        answers = iter(["", "", "", ""])
+        answers = iter(["", "", ""])
         with tempfile.TemporaryDirectory() as raw:
             prepared = prepare_install_config(
                 self.config,
@@ -29,7 +29,10 @@ class WizardTests(unittest.TestCase):
 
     def test_manual_domains_and_sni_are_applied(self) -> None:
         answers = iter(
-            ["origin.user.example", "cdn.user.example", "user@example.com", "www.apple.com"]
+            [
+                "custom", "Y", "Y", "Y", "Y", "Y", "N", "Y",
+                "origin.user.example", "cdn.user.example", "user@example.com", "www.apple.com",
+            ]
         )
         with tempfile.TemporaryDirectory() as raw:
             output = Path(raw) / "prepared.json"
@@ -46,7 +49,7 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(reloaded.reality.server_names, ("www.apple.com",))
 
     def test_auto_uses_recommended_candidate_after_confirmation(self) -> None:
-        answers = iter(["", "", "", "auto", ""])
+        answers = iter(["", "", "auto", ""])
 
         def fake_scan(*args: object, **kwargs: object) -> ScanReport:
             return ScanReport(

@@ -26,37 +26,56 @@ def verify_structure(config: DeploymentConfig, secret: DeploymentSecrets) -> lis
     results: list[Verification] = []
 
     inbounds = {item["tag"]: item for item in xray["inbounds"]}
-    results.append(Verification("xray-inbounds", set(inbounds) == {"reality-in", "cdn-ws-in"}, "Reality and CDN"))
-    results.append(
-        Verification(
-            "cdn-loopback",
-            inbounds["cdn-ws-in"]["listen"] == "127.0.0.1",
-            "CDN Xray listener is loopback-only",
+    expected = set()
+    if config.profile.has("xray-reality-vision"):
+        expected.add("reality-in")
+    if config.profile.has("cdn-vless-ws"):
+        expected.add("cdn-ws-in")
+    results.append(Verification("xray-inbounds", set(inbounds) == expected, "selected Xray inbounds"))
+    if config.profile.has("cdn-vless-ws"):
+        results.append(
+            Verification(
+                "cdn-loopback",
+                inbounds.get("cdn-ws-in", {}).get("listen") == "127.0.0.1",
+                "CDN Xray listener is loopback-only",
+            )
         )
-    )
-    warp_rules = [rule for rule in xray["routing"]["rules"] if rule.get("outboundTag") == "warp"]
-    results.append(
-        Verification(
-            "xray-hytru-routing",
-            len(warp_rules) == 1 and set(warp_rules[0]["user"]) == {HYTRU_REALITY_USER, HYTRU_CDN_USER},
-            "HyTru identities route to WireProxy",
+    if config.profile.has("egress-hytru-warp"):
+        warp_rules = [rule for rule in xray["routing"]["rules"] if rule.get("outboundTag") == "warp"]
+        expected_users = set()
+        if config.profile.has("xray-reality-vision"):
+            expected_users.add(HYTRU_REALITY_USER)
+        if config.profile.has("cdn-vless-ws"):
+            expected_users.add(HYTRU_CDN_USER)
+        results.append(
+            Verification(
+                "xray-hytru-routing",
+                len(warp_rules) == 1 and set(warp_rules[0]["user"]) == expected_users,
+                "selected HyTru identities route to WireProxy",
+            )
         )
-    )
-    anytls = sing_box["inbounds"][0]
-    results.append(
-        Verification(
-            "anytls-users",
-            {user["name"] for user in anytls["users"]} == {"origin-anytls", "hytru-anytls"},
-            "two independent AnyTLS identities",
+    anytls = next((item for item in sing_box["inbounds"] if item.get("tag") == "anytls-in"), None)
+    if config.profile.active_singbox or "sing-box" in config.profile.standby_cores:
+        expected_users = set()
+        if config.profile.has("egress-native"):
+            expected_users.add("origin-anytls")
+        if config.profile.has("egress-hytru-warp"):
+            expected_users.add("hytru-anytls")
+        results.append(
+            Verification(
+                "anytls-users",
+                anytls is not None and {user["name"] for user in anytls["users"]} == expected_users,
+                "selected AnyTLS identities",
+            )
         )
-    )
-    results.append(
-        Verification(
-            "singbox-hytru-routing",
-            sing_box["route"]["rules"][0].get("auth_user") == ["hytru-anytls"],
-            "HyTru AnyTLS routes to WireProxy",
-        )
-    )
+        if config.profile.has("egress-hytru-warp"):
+            results.append(
+                Verification(
+                    "singbox-hytru-routing",
+                    any(rule.get("auth_user") == ["hytru-anytls"] for rule in sing_box["route"]["rules"]),
+                    "HyTru AnyTLS routes to WireProxy",
+                )
+            )
     return results
 
 
@@ -64,56 +83,66 @@ def verify_runtime(config: DeploymentConfig) -> list[Verification]:
     if os.name == "nt" or os.geteuid() != 0:
         raise RuntimeError("runtime verification requires root on Linux")
     results: list[Verification] = []
-    commands = [
-        ("xray-config", ["/usr/local/bin/xray", "run", "-test", "-config", "/etc/xray/config.json"]),
-        ("singbox-config", ["/usr/local/bin/sing-box", "check", "-c", "/etc/sing-box/config.json"]),
-        ("nginx-config", ["nginx", "-t"]),
-    ]
+    commands = []
+    if config.profile.requires_xray:
+        commands.append(("xray-config", ["/usr/local/bin/xray", "run", "-test", "-config", "/etc/xray/config.json"]))
+    if config.profile.active_singbox or "sing-box" in config.profile.standby_cores:
+        commands.append(("singbox-config", ["/usr/local/bin/sing-box", "check", "-c", "/etc/sing-box/config.json"]))
+    if config.profile.has("cdn-vless-ws"):
+        commands.append(("nginx-config", ["nginx", "-t"]))
     for name, command in commands:
         completed = subprocess.run(command, capture_output=True, text=True, check=False)
         results.append(Verification(name, completed.returncode == 0, "syntax check"))
 
-    services = (
-        "xray.service",
-        "sing-box.service",
-        "nginx.service",
-        "sparklink-wireproxy.service",
-        "sparklink-wireproxy-watchdog.timer",
-        "certbot.timer",
-    )
+    services = []
+    if config.profile.requires_xray:
+        services.append("xray.service")
+    if config.profile.active_singbox:
+        services.append("sing-box.service")
+    if config.profile.has("cdn-vless-ws"):
+        services.append("nginx.service")
+    if config.profile.requires_warp:
+        services.append("sparklink-wireproxy.service")
+        services.append("sparklink-wireproxy-watchdog.timer")
+    if config.profile.requires_certificate:
+        services.append("certbot.timer")
     for service in services:
         completed = subprocess.run(["systemctl", "is-active", "--quiet", service], check=False)
         results.append(Verification(f"service-{service}", completed.returncode == 0, "active"))
 
-    health_url = f"http://127.0.0.1:{config.ports.warp_health}/readyz"
-    try:
-        with urllib.request.urlopen(health_url, timeout=3) as response:
-            health_ok = response.status == 200
-    except OSError:
-        health_ok = False
-    results.append(Verification("wireproxy-readiness", health_ok, "loopback readiness"))
+    if config.profile.requires_warp:
+        health_url = f"http://127.0.0.1:{config.ports.warp_health}/readyz"
+        try:
+            with urllib.request.urlopen(health_url, timeout=3) as response:
+                health_ok = response.status == 200
+        except OSError:
+            health_ok = False
+        results.append(Verification("wireproxy-readiness", health_ok, "loopback readiness"))
 
-    direct_trace = _curl_trace(None)
-    warp_trace = _curl_trace(config.ports.warp_socks)
-    results.append(Verification("native-trace", direct_trace.get("warp") != "on", "native is not WARP"))
-    results.append(Verification("hytru-trace", warp_trace.get("warp") == "on", "HyTru reports warp=on"))
-    results.append(
-        Verification(
-            "exit-separation",
-            bool(direct_trace.get("ip")) and bool(warp_trace.get("ip")) and direct_trace.get("ip") != warp_trace.get("ip"),
-            "native and HyTru exits differ",
-        )
-    )
-    try:
-        answers = probe_socks5_udp(config.ports.warp_socks)
-        udp_ok = answers > 0
-    except (OSError, RuntimeError):
-        udp_ok = False
-    results.append(Verification("hytru-udp", udp_ok, "SOCKS5 UDP DNS"))
+    if config.profile.requires_warp:
+        warp_trace = _curl_trace(config.ports.warp_socks)
+        results.append(Verification("hytru-trace", warp_trace.get("warp") == "on", "HyTru reports warp=on"))
+        try:
+            answers = probe_socks5_udp(config.ports.warp_socks)
+            udp_ok = answers > 0
+        except (OSError, RuntimeError):
+            udp_ok = False
+        results.append(Verification("hytru-udp", udp_ok, "SOCKS5 UDP DNS"))
+        if config.profile.has("egress-native"):
+            direct_trace = _curl_trace(None)
+            results.append(Verification("native-trace", direct_trace.get("warp") != "on", "native is not WARP"))
+            results.append(
+                Verification(
+                    "exit-separation",
+                    bool(direct_trace.get("ip")) and bool(warp_trace.get("ip")) and direct_trace.get("ip") != warp_trace.get("ip"),
+                    "native and HyTru exits differ",
+                )
+            )
 
     links = Path("/var/lib/sparklink/private/delivery/client-links.txt")
     link_count = len([line for line in links.read_text(encoding="utf-8").splitlines() if line]) if links.is_file() else 0
-    results.append(Verification("delivery", link_count == 6, f"private client entries={link_count}"))
+    expected_links = len(build_client_links(config, DeploymentSecrets.dummy()))
+    results.append(Verification("delivery", link_count == expected_links, f"private client entries={link_count}; expected={expected_links}"))
     return results
 
 

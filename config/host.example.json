@@ -1,5 +1,15 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "profile": {
+    "mode": "recommended",
+    "capabilities": [
+      "xray-reality-vision",
+      "egress-native",
+      "egress-hytru-warp"
+    ],
+    "primary_core": "xray",
+    "standby_cores": ["sing-box"]
+  },
   "host": {
     "name": "example-la-01",
     "direct_domain": "origin.example.com",
@@ -13,7 +23,8 @@
     "cdn_origin": 2053,
     "cdn_loopback": 10080,
     "warp_socks": 40000,
-    "warp_health": 40002
+    "warp_health": 40002,
+    "hysteria2": 8443
   },
   "reality": {
     "target": "www.cloudflare.com:443",

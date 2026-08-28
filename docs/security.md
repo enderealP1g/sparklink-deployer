@@ -17,10 +17,10 @@ tree so historical hostnames cannot accidentally return in examples.
 - The project lock fixes exact upstream release versions.
 - Every downloaded archive must match the checksum file from the same official release.
 - Archives are rejected if they contain path traversal or link entries.
-- Configuration is generated into a staging transaction and validated before services are
-  enabled.
+- Configuration is generated into a staging transaction and validated before selected
+  services are enabled; standby sing-box is checked but not started by Recommended.
 - Existing proxy stacks, x-ui state, custom Nginx state, unsupported OS/architecture, DNS
-  phase errors, and occupied ports stop the install.
+  phase errors, occupied selected ports, and unsupported Custom capabilities stop the install.
 
 ## Remaining limits
 
@@ -28,7 +28,7 @@ tree so historical hostnames cannot accidentally return in examples.
   add an independently maintained checksum allowlist or signature verification.
 - Cloudflare WARP is a dynamic shared exit. `warp=on` proves the tunnel path, not website
   reputation or account safety.
-- The initial alpha is not production-accepted until a disposable VPS, isolated client,
+- The current profile model is not production-accepted until a disposable VPS, isolated client,
   independent firewall probe, and reboot retest all pass.
 - Imported SNI reports are untrusted measurements, contain no executable content, and do
   not override configuration without an interactive recommendation confirmation.
