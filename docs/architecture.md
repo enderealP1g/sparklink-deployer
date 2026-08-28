@@ -46,7 +46,7 @@ start if WARP is temporarily unavailable.
 - All three entries still terminate on one VPS. A dead VPS or unreachable origin address
   affects every entry and requires another host for real host-level failover.
 
-## Node descriptor
+## Deployer node descriptor
 
 Every rendered bundle includes a public, secret-free `node-descriptor.json` describing the
 deployment mode, enabled capabilities, primary/standby core, egress semantics, versions,

@@ -72,7 +72,7 @@ inventory. A future `adopt-apply` remains frozen and, if ever approved, must be 
 6. If CDN was selected, proxy only the CDN hostname and apply its hostname-scoped
    Strict TLS, origin-port, and cache-bypass rules from Windows.
 7. Run server verification, reboot, then run verification again from a new SSH session.
-8. Review the redacted node descriptor at `/var/lib/sparklink/public/node-descriptor.json`
+8. Review the redacted Deployer node descriptor at `/var/lib/sparklink/public/node-descriptor.json`
    and import only the generated private delivery entries into an isolated client profile.
 
 For an existing known host, collect only redacted facts through its normal Windows SSH
@@ -111,7 +111,7 @@ real deployment.
 - Release versions are pinned. Release archives must match the upstream checksum file.
 - The installer creates a transaction journal and rollback bundle before it activates
   services.
-- `node-descriptor.json` is public and credential-free; it records selected capabilities,
+- `node-descriptor.json` is a public, credential-free Deployer artifact; it records selected capabilities,
   primary/standby cores, egress semantics, versions, health state, and metering readiness.
 
 ## Development checks

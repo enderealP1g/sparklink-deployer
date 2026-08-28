@@ -55,7 +55,7 @@ def planned_changes(config: DeploymentConfig) -> list[str]:
         changes.append("install WireProxy and the HyTru readiness watchdog")
     if config.profile.requires_certificate:
         changes.append("obtain the selected hostname certificate with Certbot and install a renewal hook")
-    changes.append("write the selected public node descriptor and private delivery links")
+    changes.append("write the selected public Deployer node descriptor and private delivery links")
     changes.append(
         "record every touched file and firewall baseline in a transaction backup",
     )

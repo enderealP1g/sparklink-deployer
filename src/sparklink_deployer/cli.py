@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--config", type=Path, required=True)
     verify.add_argument("--runtime", action="store_true")
 
-    describe = subparsers.add_parser("describe", help="emit a credential-free node descriptor")
+    describe = subparsers.add_parser("describe", help="emit a credential-free Deployer node descriptor")
     describe.add_argument("--config", type=Path, required=True)
     describe.add_argument("--output", type=Path)
 
@@ -205,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(rendered, encoding="utf-8", newline="\n")
-                print(f"node descriptor written: {args.output}")
+                print(f"Deployer node descriptor written: {args.output}")
             else:
                 print(rendered, end="")
             return 0
