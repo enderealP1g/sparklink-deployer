@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import base64
-import dataclasses
 import hashlib
 import json
 import os
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
+from .descriptor import build_node_descriptor
 from .model import DeploymentConfig
 from .secrets_store import DeploymentSecrets
 
@@ -19,29 +19,20 @@ HYTRU_CDN_USER = "hytru-cdn"
 
 
 def build_xray(config: DeploymentConfig, secret: DeploymentSecrets) -> dict:
-    return {
-        "log": {"loglevel": "warning"},
-        "inbounds": [
+    inbounds: list[dict] = []
+    if config.profile.has("xray-reality-vision"):
+        clients = []
+        if config.profile.has("egress-native"):
+            clients.append({"id": secret.reality_origin_uuid, "email": ORIGIN_REALITY_USER, "flow": "xtls-rprx-vision"})
+        if config.profile.has("egress-hytru-warp"):
+            clients.append({"id": secret.reality_hytru_uuid, "email": HYTRU_REALITY_USER, "flow": "xtls-rprx-vision"})
+        inbounds.append(
             {
                 "tag": "reality-in",
                 "listen": "::",
                 "port": config.ports.reality,
                 "protocol": "vless",
-                "settings": {
-                    "clients": [
-                        {
-                            "id": secret.reality_origin_uuid,
-                            "email": ORIGIN_REALITY_USER,
-                            "flow": "xtls-rprx-vision",
-                        },
-                        {
-                            "id": secret.reality_hytru_uuid,
-                            "email": HYTRU_REALITY_USER,
-                            "flow": "xtls-rprx-vision",
-                        },
-                    ],
-                    "decryption": "none",
-                },
+                "settings": {"clients": clients, "decryption": "none"},
                 "streamSettings": {
                     "network": "raw",
                     "security": "reality",
@@ -55,108 +46,114 @@ def build_xray(config: DeploymentConfig, secret: DeploymentSecrets) -> dict:
                     },
                 },
                 "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]},
-            },
+            }
+        )
+    if config.profile.has("cdn-vless-ws"):
+        clients = []
+        if config.profile.has("egress-native"):
+            clients.append({"id": secret.cdn_origin_uuid, "email": ORIGIN_CDN_USER})
+        if config.profile.has("egress-hytru-warp"):
+            clients.append({"id": secret.cdn_hytru_uuid, "email": HYTRU_CDN_USER})
+        inbounds.append(
             {
                 "tag": "cdn-ws-in",
                 "listen": "127.0.0.1",
                 "port": config.ports.cdn_loopback,
                 "protocol": "vless",
-                "settings": {
-                    "clients": [
-                        {"id": secret.cdn_origin_uuid, "email": ORIGIN_CDN_USER},
-                        {"id": secret.cdn_hytru_uuid, "email": HYTRU_CDN_USER},
-                    ],
-                    "decryption": "none",
-                },
+                "settings": {"clients": clients, "decryption": "none"},
                 "streamSettings": {
                     "network": "ws",
                     "security": "none",
                     "wsSettings": {"path": secret.cdn_path},
                 },
                 "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]},
-            },
-        ],
-        "outbounds": [
-            {"tag": "direct", "protocol": "freedom", "settings": {}},
+            }
+        )
+
+    outbounds = [{"tag": "direct", "protocol": "freedom", "settings": {}}]
+    if config.profile.requires_warp:
+        outbounds.append(
             {
                 "tag": "warp",
                 "protocol": "socks",
-                "settings": {
-                    "servers": [
-                        {
-                            "address": "127.0.0.1",
-                            "port": config.ports.warp_socks,
-                        }
-                    ]
-                },
-            },
-            {"tag": "blocked", "protocol": "blackhole", "settings": {}},
-        ],
-        "routing": {
-            "domainStrategy": "IPIfNonMatch",
-            "rules": [
-                {
-                    "type": "field",
-                    "user": [HYTRU_REALITY_USER, HYTRU_CDN_USER],
-                    "network": "tcp,udp",
-                    "outboundTag": "warp",
-                },
-                {
-                    "type": "field",
-                    "user": [ORIGIN_REALITY_USER, ORIGIN_CDN_USER],
-                    "network": "tcp,udp",
-                    "outboundTag": "direct",
-                },
-            ],
-        },
+                "settings": {"servers": [{"address": "127.0.0.1", "port": config.ports.warp_socks}]},
+            }
+        )
+    outbounds.append({"tag": "blocked", "protocol": "blackhole", "settings": {}})
+    rules: list[dict] = []
+    if config.profile.has("egress-hytru-warp"):
+        users = []
+        if config.profile.has("xray-reality-vision"):
+            users.append(HYTRU_REALITY_USER)
+        if config.profile.has("cdn-vless-ws"):
+            users.append(HYTRU_CDN_USER)
+        if users:
+            rules.append({"type": "field", "user": users, "network": "tcp,udp", "outboundTag": "warp"})
+    native_users = []
+    if config.profile.has("xray-reality-vision"):
+        native_users.append(ORIGIN_REALITY_USER)
+    if config.profile.has("cdn-vless-ws"):
+        native_users.append(ORIGIN_CDN_USER)
+    if native_users:
+        rules.append({"type": "field", "user": native_users, "network": "tcp,udp", "outboundTag": "direct"})
+    return {
+        "log": {"loglevel": "warning"},
+        "inbounds": inbounds,
+        "outbounds": outbounds,
+        "routing": {"domainStrategy": "IPIfNonMatch", "rules": rules},
     }
 
 
 def build_sing_box(config: DeploymentConfig, secret: DeploymentSecrets) -> dict:
-    return {
-        "log": {"level": "info", "timestamp": True},
-        "inbounds": [
-            {
-                "type": "anytls",
-                "tag": "anytls-in",
-                "listen": "::",
-                "listen_port": config.ports.anytls,
-                "users": [
-                    {"name": "origin-anytls", "password": secret.anytls_origin_password},
-                    {"name": "hytru-anytls", "password": secret.anytls_hytru_password},
-                ],
-                "tls": {
-                    "enabled": True,
-                    "certificate_path": "/etc/sparklink/tls/fullchain.pem",
-                    "key_path": "/etc/sparklink/tls/privkey.pem",
-                },
-            }
-        ],
-        "outbounds": [
-            {"type": "direct", "tag": "direct"},
+    inbounds: list[dict] = []
+    if config.profile.active_singbox or "sing-box" in config.profile.standby_cores:
+        users = []
+        if config.profile.has("egress-native"):
+            users.append({"name": "origin-anytls", "password": secret.anytls_origin_password})
+        if config.profile.has("egress-hytru-warp"):
+            users.append({"name": "hytru-anytls", "password": secret.anytls_hytru_password})
+        if users:
+            inbounds.append(
+                {
+                    "type": "anytls",
+                    "tag": "anytls-in",
+                    "listen": "::",
+                    "listen_port": config.ports.anytls,
+                    "users": users,
+                    "tls": {
+                        "enabled": True,
+                        "certificate_path": "/etc/sparklink/tls/fullchain.pem",
+                        "key_path": "/etc/sparklink/tls/privkey.pem",
+                    },
+                }
+            )
+    if config.profile.has("hysteria2"):
+        raise ValueError("hysteria2 is cataloged for Custom but its renderer is reserved for PR3")
+    outbounds = [{"type": "direct", "tag": "direct"}]
+    rules: list[dict] = []
+    if config.profile.requires_warp:
+        outbounds.append(
             {
                 "type": "socks",
                 "tag": "warp",
                 "server": "127.0.0.1",
                 "server_port": config.ports.warp_socks,
                 "version": "5",
-            },
-        ],
-        "route": {
-            "auto_detect_interface": True,
-            "rules": [
-                {
-                    "auth_user": ["hytru-anytls"],
-                    "action": "route",
-                    "outbound": "warp",
-                }
-            ],
-            "final": "direct",
-        },
+            }
+        )
+        if config.profile.has("egress-hytru-warp"):
+            rules.append({"auth_user": ["hytru-anytls"], "action": "route", "outbound": "warp"})
+    return {
+        "log": {"level": "info", "timestamp": True},
+        "inbounds": inbounds,
+        "outbounds": outbounds,
+        "route": {"auto_detect_interface": True, "rules": rules, "final": "direct"},
     }
 
 
 def build_nginx(config: DeploymentConfig, secret: DeploymentSecrets) -> str:
+    if not config.profile.has("cdn-vless-ws"):
+        raise ValueError("CDN capability is disabled")
     return f"""server {{
     listen 80;
     listen [::]:80;
@@ -227,7 +224,7 @@ WantedBy=multi-user.target
 
 def build_sing_box_service() -> str:
     return """[Unit]
-Description=SparkLink sing-box AnyTLS ingress
+Description=SparkLink sing-box standby/ingress
 Wants=network-online.target sparklink-wireproxy.service
 After=network-online.target
 
@@ -347,46 +344,60 @@ systemctl --no-block restart sparklink-wireproxy.service
 """
 
 
-def build_cert_renew_hook() -> str:
+def build_cert_renew_hook(config: DeploymentConfig) -> str:
+    reloads = ["systemctl reload nginx"] if config.profile.has("cdn-vless-ws") else []
+    if config.profile.active_singbox:
+        reloads.append("systemctl restart sing-box")
+    if not reloads:
+        reloads.append(":")
     return """#!/usr/bin/env bash
 set -euo pipefail
 install -d -o root -g sparklink-cert -m 750 /etc/sparklink/tls
 install -o root -g sparklink-cert -m 640 "$RENEWED_LINEAGE/fullchain.pem" /etc/sparklink/tls/fullchain.pem
 install -o root -g sparklink-cert -m 640 "$RENEWED_LINEAGE/privkey.pem" /etc/sparklink/tls/privkey.pem
-systemctl reload nginx
-systemctl restart sing-box
-"""
+""" + "\n".join(reloads) + "\n"
 
 
 def build_client_links(config: DeploymentConfig, secret: DeploymentSecrets) -> list[str]:
-    reality_common = {
-        "encryption": "none",
-        "flow": "xtls-rprx-vision",
-        "security": "reality",
-        "sni": config.reality.server_names[0],
-        "fp": "chrome",
-        "pbk": secret.reality_public_key,
-        "sid": secret.reality_short_id,
-        "type": "tcp",
-    }
-    cdn_common = {
-        "encryption": "none",
-        "security": "tls",
-        "sni": config.host.cdn_domain,
-        "fp": "chrome",
-        "type": "ws",
-        "host": config.host.cdn_domain,
-        "path": secret.cdn_path,
-    }
-    anytls_query = urlencode({"sni": config.host.direct_domain})
-    return [
-        _vless_uri(secret.reality_origin_uuid, config.host.direct_domain, config.ports.reality, reality_common, f"{config.host.name}-Origin-Reality"),
-        _anytls_uri(secret.anytls_origin_password, config.host.direct_domain, config.ports.anytls, anytls_query, f"{config.host.name}-Origin-AnyTLS"),
-        _vless_uri(secret.cdn_origin_uuid, config.host.cdn_domain, 443, cdn_common, f"{config.host.name}-Origin-CDN"),
-        _vless_uri(secret.reality_hytru_uuid, config.host.direct_domain, config.ports.reality, reality_common, f"{config.host.name}-HyTru-Reality"),
-        _anytls_uri(secret.anytls_hytru_password, config.host.direct_domain, config.ports.anytls, anytls_query, f"{config.host.name}-HyTru-AnyTLS"),
-        _vless_uri(secret.cdn_hytru_uuid, config.host.cdn_domain, 443, cdn_common, f"{config.host.name}-HyTru-CDN"),
-    ]
+    links: list[str] = []
+    if config.profile.has("xray-reality-vision"):
+        reality_common = {
+            "encryption": "none",
+            "flow": "xtls-rprx-vision",
+            "security": "reality",
+            "sni": config.reality.server_names[0],
+            "fp": "chrome",
+            "pbk": secret.reality_public_key,
+            "sid": secret.reality_short_id,
+            "type": "tcp",
+        }
+        if config.profile.has("egress-native"):
+            links.append(_vless_uri(secret.reality_origin_uuid, config.host.direct_domain, config.ports.reality, reality_common, f"{config.host.name}-Origin-Reality"))
+        if config.profile.has("egress-hytru-warp"):
+            links.append(_vless_uri(secret.reality_hytru_uuid, config.host.direct_domain, config.ports.reality, reality_common, f"{config.host.name}-HyTru-Reality"))
+    if config.profile.has("singbox-anytls"):
+        query = urlencode({"sni": config.host.direct_domain})
+        if config.profile.has("egress-native"):
+            links.append(_anytls_uri(secret.anytls_origin_password, config.host.direct_domain, config.ports.anytls, query, f"{config.host.name}-Origin-AnyTLS"))
+        if config.profile.has("egress-hytru-warp"):
+            links.append(_anytls_uri(secret.anytls_hytru_password, config.host.direct_domain, config.ports.anytls, query, f"{config.host.name}-HyTru-AnyTLS"))
+    if config.profile.has("cdn-vless-ws"):
+        cdn_common = {
+            "encryption": "none",
+            "security": "tls",
+            "sni": config.host.cdn_domain,
+            "fp": "chrome",
+            "type": "ws",
+            "host": config.host.cdn_domain,
+            "path": secret.cdn_path,
+        }
+        if config.profile.has("egress-native"):
+            links.append(_vless_uri(secret.cdn_origin_uuid, config.host.cdn_domain, 443, cdn_common, f"{config.host.name}-Origin-CDN"))
+        if config.profile.has("egress-hytru-warp"):
+            links.append(_vless_uri(secret.cdn_hytru_uuid, config.host.cdn_domain, 443, cdn_common, f"{config.host.name}-HyTru-CDN"))
+    if config.profile.has("hysteria2"):
+        raise ValueError("hysteria2 client delivery is reserved for PR3")
+    return links
 
 
 def render_bundle(
@@ -394,23 +405,30 @@ def render_bundle(
     secret: DeploymentSecrets,
     output: Path,
     include_private: bool = False,
+    versions: dict | None = None,
 ) -> dict[str, str]:
     files: dict[str, tuple[str, int]] = {
-        "etc/xray/config.json": (_json(build_xray(config, secret)), 0o640),
-        "etc/sing-box/config.json": (_json(build_sing_box(config, secret)), 0o640),
-        "etc/nginx/sites-available/sparklink": (build_nginx(config, secret), 0o644),
-        "etc/systemd/system/xray.service": (build_xray_service(), 0o644),
-        "etc/systemd/system/sing-box.service": (build_sing_box_service(), 0o644),
-        "etc/systemd/system/sparklink-wireproxy.service": (build_wireproxy_service(config), 0o644),
-        "etc/systemd/system/sparklink-wireproxy-watchdog.service": (build_watchdog_service(), 0o644),
-        "etc/systemd/system/sparklink-wireproxy-watchdog.timer": (build_watchdog_timer(), 0o644),
-        "usr/local/libexec/sparklink/watch-wireproxy.sh": (build_watchdog_script(config), 0o750),
-        "etc/letsencrypt/renewal-hooks/deploy/sparklink-reload": (build_cert_renew_hook(), 0o750),
         "var/lib/sparklink/public/deployment.json": (_json(config.public_summary()), 0o644),
+        "var/lib/sparklink/public/node-descriptor.json": (_json(build_node_descriptor(config, versions=versions)), 0o644),
     }
+    if config.profile.requires_xray:
+        files["etc/xray/config.json"] = (_json(build_xray(config, secret)), 0o640)
+        files["etc/systemd/system/xray.service"] = (build_xray_service(), 0o644)
+    if config.profile.active_singbox or "sing-box" in config.profile.standby_cores:
+        files["etc/sing-box/config.json"] = (_json(build_sing_box(config, secret)), 0o640)
+        files["etc/systemd/system/sing-box.service"] = (build_sing_box_service(), 0o644)
+    if config.profile.has("cdn-vless-ws"):
+        files["etc/nginx/sites-available/sparklink"] = (build_nginx(config, secret), 0o644)
+    if config.profile.requires_warp:
+        files["etc/systemd/system/sparklink-wireproxy.service"] = (build_wireproxy_service(config), 0o644)
+        files["etc/systemd/system/sparklink-wireproxy-watchdog.service"] = (build_watchdog_service(), 0o644)
+        files["etc/systemd/system/sparklink-wireproxy-watchdog.timer"] = (build_watchdog_timer(), 0o644)
+        files["usr/local/libexec/sparklink/watch-wireproxy.sh"] = (build_watchdog_script(config), 0o750)
+    if config.profile.requires_certificate:
+        files["etc/letsencrypt/renewal-hooks/deploy/sparklink-reload"] = (build_cert_renew_hook(config), 0o750)
     if include_private:
         links = build_client_links(config, secret)
-        link_text = "\n".join(links) + "\n"
+        link_text = "\n".join(links) + ("\n" if links else "")
         files["var/lib/sparklink/private/delivery/client-links.txt"] = (link_text, 0o600)
         files["var/lib/sparklink/private/delivery/subscription.txt"] = (
             base64.b64encode(link_text.encode("utf-8")).decode("ascii") + "\n",

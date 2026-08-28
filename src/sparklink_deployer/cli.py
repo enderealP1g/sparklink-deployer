@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import __version__
 from .deploy import install, rollback
+from .descriptor import build_node_descriptor
 from .model import ConfigError, DeploymentConfig, split_host_port
 from .preflight import planned_changes, run_preflight
 from .render import render_bundle
@@ -63,6 +64,10 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--config", type=Path, required=True)
     verify.add_argument("--runtime", action="store_true")
 
+    describe = subparsers.add_parser("describe", help="emit a credential-free node descriptor")
+    describe.add_argument("--config", type=Path, required=True)
+    describe.add_argument("--output", type=Path)
+
     rollback_parser = subparsers.add_parser("rollback", help="restore one approved transaction")
     rollback_parser.add_argument("--transaction", required=True)
     rollback_parser.add_argument("--yes", action="store_true")
@@ -114,6 +119,16 @@ def main(argv: list[str] | None = None) -> int:
                 state = "PASS" if result.passed else "FAIL"
                 print(f"{state} {result.name}: {result.detail}")
             return 0 if all(result.passed for result in results) else 1
+        if args.command == "describe":
+            value = build_node_descriptor(config)
+            rendered = json.dumps(value, indent=2, ensure_ascii=False) + "\n"
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(rendered, encoding="utf-8", newline="\n")
+                print(f"node descriptor written: {args.output}")
+            else:
+                print(rendered, end="")
+            return 0
         parser.error("unhandled command")
     except (ConfigError, OSError, RuntimeError, ValueError, PermissionError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -156,9 +171,9 @@ def _plan(config: DeploymentConfig, strict_vps: bool, as_json: bool) -> int:
         "secrets": "generated on VPS; never printed",
         "rollback_root": "/var/backups/sparklink-deployer/<transaction-id>",
         "acceptance": [
-            "server syntax, services, listeners, native exit, warp=on, SOCKS5 UDP",
-            "six isolated client paths from Windows",
-            "CDN origin unreachable from a non-Cloudflare source",
+            "selected server syntax, services, listeners, and egress health",
+            "all selected client paths from Windows",
+            "CDN origin unreachable from a non-Cloudflare source when CDN is enabled",
             "repeat all checks after reboot from a new SSH session",
         ],
     }
@@ -166,6 +181,8 @@ def _plan(config: DeploymentConfig, strict_vps: bool, as_json: bool) -> int:
         print(json.dumps(value, indent=2, ensure_ascii=False))
     else:
         print(f"SparkLink plan for {config.host.name}")
+        print(f"Profile: {config.profile.mode}; capabilities={', '.join(config.profile.capabilities)}")
+        print(f"sing-box: {'active' if config.profile.active_singbox else ('standby' if 'sing-box' in config.profile.standby_cores else 'disabled')}")
         for check in report.checks:
             print(f"{'PASS' if check.ok else 'FAIL'} {check.name}: {check.detail}")
         print("Planned changes:")

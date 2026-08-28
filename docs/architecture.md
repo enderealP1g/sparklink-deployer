@@ -1,18 +1,25 @@
 # Architecture
 
+## Capability profiles
+
+`DeploymentConfig` schema 2 separates reusable capability assets from the profile chosen
+for one VPS. Recommended enables Xray Reality with Native and HyTru identities. Custom can
+add active AnyTLS, CDN fallback, or the Custom-only Hysteria2 capability.
+
+sing-box is installed and configuration-checked as a standby core in Recommended, but its
+public listener remains disabled until explicitly selected in Custom.
+
 ## Traffic paths
 
 Each protocol has two credentials. Authentication identity selects the exit; it does not
 create a second public listener.
 
 ```text
-VLESS REALITY ─┐
-AnyTLS ────────┼─ Origin identity ── direct ── VPS native exit
-VLESS CDN ─────┘
+Xray VLESS REALITY ─┐
+AnyTLS / CDN (opt.) ┼─ Origin identity ── direct ── VPS native exit
 
-VLESS REALITY ─┐
-AnyTLS ────────┼─ HyTru identity ── loopback SOCKS5 ── WireProxy ── WARP
-VLESS CDN ─────┘
+Xray VLESS REALITY ─┐
+AnyTLS / CDN (opt.) ┼─ HyTru identity ── loopback SOCKS5 ── WireProxy ── WARP
 ```
 
 WireProxy is kept as a direct systemd main process. Its SOCKS and readiness ports bind to
@@ -27,6 +34,12 @@ start if WARP is temporarily unavailable.
 - The CDN origin port must accept Cloudflare source ranges only.
 - All three entries still terminate on one VPS. A dead VPS or unreachable origin address
   affects every entry and requires another host for real host-level failover.
+
+## Node descriptor
+
+Every rendered bundle includes a public, secret-free `node-descriptor.json` describing the
+deployment mode, enabled capabilities, primary/standby core, egress semantics, versions,
+health state, and metering readiness. It is a state description, not a subscription.
 
 ## Why fresh-host-only
 
