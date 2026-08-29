@@ -27,8 +27,9 @@ user accept the recommendation, enter a hostname manually, or keep the configure
 
 This repository is an alpha implementation extracted from deployments that were
 individually validated. The local renderer, model checks, secret boundaries, and tests
-are ready. Production installation remains gated on a disposable fresh VPS acceptance
-run and a full reboot retest.
+are ready. The first disposable fresh-host acceptance for `hypro02` completed with a
+full reboot retest; broader production use and each additional host remain gated on
+their own evidence.
 
 The current installer still refuses to mutate an existing x-ui/3x-ui, Xray, sing-box, or
 custom Nginx installation. The read-only `inventory-collect` and `adopt-plan` commands can
@@ -98,7 +99,8 @@ Product vocabulary and system boundaries are consolidated in [docs/product](docs
 they intentionally reserve Control Plane schema and orchestration design for a future product phase.
 
 See `docs/architecture.md`, `docs/cloudflare-manual.md`, and `docs/runbook.md` before a
-real deployment.
+real deployment. The dated [fresh-host acceptance record](docs/acceptance/2026-08-29_HYPRO02_FRESH_HOST_ACCEPTANCE.md)
+contains the evidence and remaining limits for the first accepted candidate.
 
 ## Security boundaries
 

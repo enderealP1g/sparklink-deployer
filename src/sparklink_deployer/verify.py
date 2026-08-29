@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .model import DeploymentConfig
-from .render import HYTRU_CDN_USER, HYTRU_REALITY_USER, build_sing_box, build_xray
+from .render import HYTRU_CDN_USER, HYTRU_REALITY_USER, build_client_links, build_sing_box, build_xray
 from .secrets_store import DeploymentSecrets
 from .udp_probe import probe_socks5_udp
 

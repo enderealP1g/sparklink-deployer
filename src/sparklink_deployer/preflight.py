@@ -69,13 +69,17 @@ def run_preflight(config: DeploymentConfig, strict_host: bool) -> PreflightRepor
         checks.append(Check("host-mode", True, "portable plan; VPS checks deferred"))
         return PreflightReport(tuple(checks))
 
+    if platform.system() != "Linux":
+        raise RuntimeError("strict VPS preflight requires Linux; run it on the target VPS")
+
     checks.extend(_linux_checks(config))
     return PreflightReport(tuple(checks))
 
 
 def _linux_checks(config: DeploymentConfig) -> list[Check]:
     checks: list[Check] = []
-    checks.append(Check("root", os.geteuid() == 0, "root required" if os.geteuid() else "root"))
+    effective_uid = os.geteuid() if hasattr(os, "geteuid") else None
+    checks.append(Check("root", effective_uid == 0, "root" if effective_uid == 0 else "root required"))
     checks.append(Check("kernel", platform.system() == "Linux", platform.system()))
     machine = platform.machine().lower()
     checks.append(Check("architecture", machine in {"x86_64", "amd64"}, machine))

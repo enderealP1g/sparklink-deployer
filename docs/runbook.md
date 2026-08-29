@@ -4,8 +4,9 @@
 
 - Use a fresh Ubuntu 24.04 x86_64 VPS with console/rescue access.
 - Confirm the intended SSH port and keep the existing SSH session open.
-- Select Recommended or Custom. Only enable CDN when a CDN fallback is actually needed;
-  only enable active AnyTLS when it is intended as a user-facing entry.
+- Select Recommended or Custom. Only enable CDN when a CDN fallback is actually needed.
+  AnyTLS installation is a Deployer capability; it must not be treated as a user-facing
+  production entry until reliable per-user accounting and User attribution are verified.
 - Complete the Cloudflare handoff only for a selected CDN capability and verify its DNS record.
 - Optionally create a current local SNI report, then select `auto`, a manual hostname, or
   the configured default in the install wizard. Treat reports older than seven days as stale.
@@ -32,7 +33,10 @@ Server checks are necessary but not sufficient:
 4. Native and HyTru exits differ. Native is the VPS exit; HyTru is treated as dynamic.
 5. Every generated private client entry completes its intended real request from an isolated client.
 6. When CDN is selected, a non-Cloudflare source cannot connect to the CDN origin port.
-7. Reboot the VPS and repeat the applicable checks from a new SSH session.
+7. If certificate issuance started Nginx before the final CDN site was installed, reload
+   Nginx after final activation and verify the live `2053` listener; a successful `nginx -t`
+   alone is not sufficient.
+8. Reboot the VPS and repeat the applicable checks from a new SSH session.
 
 Hysteria2 is Custom-only. Its rendered sing-box UDP/QUIC listener and Salamander obfuscation
 are structurally checked, but real client connectivity, UDP behavior, and reboot recovery
