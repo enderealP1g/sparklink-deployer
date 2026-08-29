@@ -3,12 +3,21 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 from . import __version__
 from .deploy import install, rollback
 from .descriptor import build_node_descriptor
+from .inventory import (
+    build_adoption_plan,
+    collect_remote_inventory,
+    load_inventory,
+    load_local_inventories,
+    write_inventory,
+    write_local_inventory,
+)
 from .model import ConfigError, DeploymentConfig, split_host_port
 from .preflight import planned_changes, run_preflight
 from .render import render_bundle
@@ -64,9 +73,34 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--config", type=Path, required=True)
     verify.add_argument("--runtime", action="store_true")
 
-    describe = subparsers.add_parser("describe", help="emit a credential-free node descriptor")
+    describe = subparsers.add_parser("describe", help="emit a credential-free Deployer node descriptor")
     describe.add_argument("--config", type=Path, required=True)
     describe.add_argument("--output", type=Path)
+
+    inventory_collect = subparsers.add_parser(
+        "inventory-collect", help="collect a redacted inventory through read-only SSH"
+    )
+    inventory_collect.add_argument("--target", required=True, help="existing SSH alias or host")
+    inventory_collect.add_argument("--name", help="local operator host label")
+    inventory_collect.add_argument("--provider", help="optional provider label for local inventory")
+    inventory_collect.add_argument("--port", type=int)
+    inventory_collect.add_argument("--output", type=Path, required=True)
+    inventory_collect.add_argument("--inventory-root", type=Path, help="local operator workspace for host inventory")
+
+    adopt = subparsers.add_parser(
+        "adopt-plan", help="report read-only adoption compatibility for a known host layout"
+    )
+    adopt.add_argument("--inventory", type=Path, required=True)
+    adopt.add_argument("--config", type=Path, help="optional desired deployment profile")
+    adopt.add_argument("--desired-capability", action="append", default=[])
+    adopt.add_argument("--output", type=Path)
+    adopt.add_argument("--inventory-root", type=Path, help="local operator workspace for host inventory")
+
+    inventory_status = subparsers.add_parser(
+        "inventory-status", help="summarize locally stored redacted host inventories"
+    )
+    inventory_status.add_argument("--inventory-root", type=Path, default=Path("."))
+    inventory_status.add_argument("--json", action="store_true")
 
     rollback_parser = subparsers.add_parser("rollback", help="restore one approved transaction")
     rollback_parser.add_argument("--transaction", required=True)
@@ -85,6 +119,52 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "reality-scan":
             return _scan(args)
+
+        if args.command == "inventory-collect":
+            observation = collect_remote_inventory(
+                args.target,
+                name=args.name,
+                provider=args.provider,
+                port=args.port,
+            )
+            write_inventory(observation, args.output)
+            inventory_path = write_local_inventory(observation, args.inventory_root) if args.inventory_root else None
+            print(f"redacted inventory written: {args.output}")
+            if inventory_path:
+                print(f"local host inventory written: {inventory_path}")
+            return 0
+
+        if args.command == "adopt-plan":
+            observation = load_inventory(args.inventory)
+            desired = tuple(args.desired_capability)
+            if args.config:
+                desired = DeploymentConfig.load(args.config).profile.capabilities
+            plan = build_adoption_plan(observation, desired) if desired else build_adoption_plan(observation)
+            value = plan.to_dict()
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+                print(f"adoption plan written: {args.output}")
+            if args.inventory_root:
+                destination = write_local_inventory(observation, args.inventory_root)
+                print(f"local host inventory written: {destination}")
+            print(f"Host: {plan.host}; family={plan.family}; status={plan.status}")
+            print(f"Detected: {', '.join(plan.detected_capabilities) or 'none'}")
+            print(f"Gaps: {', '.join(plan.gaps) or 'none'}")
+            print("No remote changes were performed; explicit per-host approval is required for any future apply.")
+            return 0 if plan.status in {"review-required", "deployer-ready"} else 1
+
+        if args.command == "inventory-status":
+            plans = [build_adoption_plan(observation) for observation in load_local_inventories(args.inventory_root)]
+            value = {"schema_version": 1, "mode": "read-only-inventory-status", "hosts": [plan.to_dict() for plan in plans]}
+            if args.json:
+                print(json.dumps(value, indent=2, ensure_ascii=False))
+            else:
+                if not plans:
+                    print("No local host inventories found.")
+                for plan in plans:
+                    print(f"{plan.host}: {plan.family}; {plan.status}; gaps={','.join(plan.gaps) or 'none'}")
+            return 0
 
         config = DeploymentConfig.load(args.config)
         if args.command == "prepare-install":
@@ -125,12 +205,12 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(rendered, encoding="utf-8", newline="\n")
-                print(f"node descriptor written: {args.output}")
+                print(f"Deployer node descriptor written: {args.output}")
             else:
                 print(rendered, end="")
             return 0
         parser.error("unhandled command")
-    except (ConfigError, OSError, RuntimeError, ValueError, PermissionError) as exc:
+    except (ConfigError, OSError, RuntimeError, ValueError, PermissionError, subprocess.SubprocessError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     return 2

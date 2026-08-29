@@ -24,7 +24,7 @@ CAPABILITY_CATALOG = (
         "Hysteria2 weak-network capability",
         "sing-box",
         custom_only=True,
-        render_status="planned-pr3",
+        render_status="ready-custom-pending-live-acceptance",
     ),
     CapabilitySpec(
         "veilshift-edge",

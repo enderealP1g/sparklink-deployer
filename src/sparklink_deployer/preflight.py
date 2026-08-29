@@ -55,7 +55,7 @@ def planned_changes(config: DeploymentConfig) -> list[str]:
         changes.append("install WireProxy and the HyTru readiness watchdog")
     if config.profile.requires_certificate:
         changes.append("obtain the selected hostname certificate with Certbot and install a renewal hook")
-    changes.append("write the selected public node descriptor and private delivery links")
+    changes.append("write the selected public Deployer node descriptor and private delivery links")
     changes.append(
         "record every touched file and firewall baseline in a transaction backup",
     )
@@ -69,13 +69,17 @@ def run_preflight(config: DeploymentConfig, strict_host: bool) -> PreflightRepor
         checks.append(Check("host-mode", True, "portable plan; VPS checks deferred"))
         return PreflightReport(tuple(checks))
 
+    if platform.system() != "Linux":
+        raise RuntimeError("strict VPS preflight requires Linux; run it on the target VPS")
+
     checks.extend(_linux_checks(config))
     return PreflightReport(tuple(checks))
 
 
 def _linux_checks(config: DeploymentConfig) -> list[Check]:
     checks: list[Check] = []
-    checks.append(Check("root", os.geteuid() == 0, "root required" if os.geteuid() else "root"))
+    effective_uid = os.geteuid() if hasattr(os, "geteuid") else None
+    checks.append(Check("root", effective_uid == 0, "root" if effective_uid == 0 else "root required"))
     checks.append(Check("kernel", platform.system() == "Linux", platform.system()))
     machine = platform.machine().lower()
     checks.append(Check("architecture", machine in {"x86_64", "amd64"}, machine))
@@ -153,8 +157,6 @@ def _linux_checks(config: DeploymentConfig) -> list[Check]:
         target_host, target_port = split_host_port(config.reality.target)
         tls_ok, tls_detail = _tls_probe(target_host, target_port)
         checks.append(Check("reality-target-tls", tls_ok, tls_detail))
-    if config.profile.has("hysteria2"):
-        checks.append(Check("hysteria2-renderer", False, "HY2 is reserved for the PR3 parameterized renderer"))
     return checks
 
 

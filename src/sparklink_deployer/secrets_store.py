@@ -20,7 +20,14 @@ SECRET_FIELDS = {
     "reality_public_key",
     "reality_short_id",
     "cdn_path",
+    "hy2_origin_password",
+    "hy2_hytru_password",
+    "hy2_obfs_password",
 }
+
+LEGACY_SECRET_FIELDS = SECRET_FIELDS.difference(
+    {"hy2_origin_password", "hy2_hytru_password", "hy2_obfs_password"}
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -35,9 +42,19 @@ class DeploymentSecrets:
     reality_public_key: str
     reality_short_id: str
     cdn_path: str
+    # Empty values keep schema-1/PR2 secret files readable; HY2 rendering requires
+    # all three values to be populated.
+    hy2_origin_password: str = ""
+    hy2_hytru_password: str = ""
+    hy2_obfs_password: str = ""
 
     @classmethod
-    def generate(cls, reality_private_key: str, reality_public_key: str) -> "DeploymentSecrets":
+    def generate(cls, reality_private_key: str = "", reality_public_key: str = "") -> "DeploymentSecrets":
+        # Profiles without Xray still use one uniform secret file. The generated
+        # placeholders are never rendered into a listener and are rotated with the
+        # rest of the file; a REALITY profile passes the real x25519 pair explicitly.
+        reality_private_key = reality_private_key or random_secrets.token_urlsafe(32)
+        reality_public_key = reality_public_key or random_secrets.token_urlsafe(32)
         return cls(
             reality_origin_uuid=str(uuid.uuid4()),
             reality_hytru_uuid=str(uuid.uuid4()),
@@ -49,13 +66,19 @@ class DeploymentSecrets:
             reality_public_key=reality_public_key,
             reality_short_id=random_secrets.token_hex(8),
             cdn_path="/" + random_secrets.token_urlsafe(24),
+            hy2_origin_password=random_secrets.token_urlsafe(32),
+            hy2_hytru_password=random_secrets.token_urlsafe(32),
+            hy2_obfs_password=random_secrets.token_urlsafe(32),
         )
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "DeploymentSecrets":
-        if set(raw) != SECRET_FIELDS:
+        if set(raw) not in (SECRET_FIELDS, LEGACY_SECRET_FIELDS):
             raise ValueError("secret file has an unexpected shape")
-        value = cls(**{key: str(raw[key]) for key in SECRET_FIELDS})
+        values = {key: str(raw[key]) for key in LEGACY_SECRET_FIELDS}
+        for key in SECRET_FIELDS.difference(LEGACY_SECRET_FIELDS):
+            values[key] = str(raw.get(key, ""))
+        value = cls(**values)
         value.validate()
         return value
 
@@ -78,6 +101,9 @@ class DeploymentSecrets:
             raise ValueError("VLESS identities must be unique")
         if min(len(self.anytls_origin_password), len(self.anytls_hytru_password)) < 32:
             raise ValueError("AnyTLS passwords are too short")
+        hy2_values = (self.hy2_origin_password, self.hy2_hytru_password, self.hy2_obfs_password)
+        if any(hy2_values) and min(len(value) for value in hy2_values) < 32:
+            raise ValueError("Hysteria2 passwords are too short")
         if not self.cdn_path.startswith("/") or len(self.cdn_path) < 24:
             raise ValueError("CDN path is invalid")
         if len(self.reality_short_id) != 16:
@@ -111,4 +137,7 @@ class DeploymentSecrets:
             reality_public_key="PUBLIC_KEY_PLACEHOLDER",
             reality_short_id="0123456789abcdef",
             cdn_path="/dummy-path-not-for-production",
+            hy2_origin_password="origin-hy2-dummy-password-not-for-production-32",
+            hy2_hytru_password="hytru-hy2-dummy-password-not-for-production-32",
+            hy2_obfs_password="obfs-hy2-dummy-password-not-for-production-32",
         )

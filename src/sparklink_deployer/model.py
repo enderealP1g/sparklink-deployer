@@ -241,8 +241,6 @@ class DeploymentConfig:
             raise ConfigError("an ingress requires at least one egress identity")
         if self.profile.has("hysteria2") and self.profile.mode != "custom":
             raise ConfigError("hysteria2 is Custom-only")
-        if self.profile.has("hysteria2"):
-            raise ConfigError("hysteria2 capability is reserved for the PR3 renderer")
         if self.profile.has("veilshift-edge"):
             raise ConfigError("veilshift-edge capability is reserved for the PR5 controller")
 

@@ -18,6 +18,7 @@ from pathlib import Path
 API = "https://api.cloudflareclient.com/v0a2158/reg"
 USER_AGENT = "okhttp/3.12.1"
 CLIENT_VERSION = "a-6.10-2158"
+DEFAULT_WARP_ENDPOINT_PORT = 2408
 
 
 @dataclasses.dataclass(frozen=True)
@@ -34,7 +35,8 @@ class WarpIdentity:
             raise ValueError("WARP key material is missing")
         if not self.addresses:
             raise ValueError("WARP addresses are missing")
-        if ":" not in self.endpoint:
+        host, separator, port = self.endpoint.rpartition(":")
+        if not separator or not host or not port.isdigit() or not 1 <= int(port) <= 65535:
             raise ValueError("WARP endpoint is invalid")
 
 
@@ -171,6 +173,7 @@ def _build_identity(account: dict, private_key: str) -> WarpIdentity:
     endpoint = endpoint_value.get("v4") if isinstance(endpoint_value, dict) else endpoint_value
     if not endpoint or not peer.get("public_key"):
         raise RuntimeError("registration response has no IPv4 peer")
+    endpoint = _normalize_endpoint(endpoint)
     normalized_addresses = []
     for family, suffix in (("v4", "/32"), ("v6", "/128")):
         value = addresses.get(family)
@@ -191,9 +194,27 @@ def _build_identity(account: dict, private_key: str) -> WarpIdentity:
 def _load_identity(path: Path) -> WarpIdentity:
     raw = json.loads(path.read_text(encoding="utf-8"))
     raw["addresses"] = tuple(raw["addresses"])
+    raw["endpoint"] = _normalize_endpoint(raw["endpoint"])
     identity = WarpIdentity(**raw)
     identity.validate()
     return identity
+
+
+def _normalize_endpoint(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("WARP endpoint is invalid")
+    endpoint = value.strip()
+    host, separator, port = endpoint.rpartition(":")
+    if not separator:
+        return f"{endpoint}:{DEFAULT_WARP_ENDPOINT_PORT}"
+    if not host or not port.isdigit():
+        raise ValueError("WARP endpoint is invalid")
+    port_number = int(port)
+    if port_number == 0:
+        port_number = DEFAULT_WARP_ENDPOINT_PORT
+    if not 1 <= port_number <= 65535:
+        raise ValueError("WARP endpoint is invalid")
+    return f"{host}:{port_number}"
 
 
 def _secure_json(path: Path, value: object) -> None:

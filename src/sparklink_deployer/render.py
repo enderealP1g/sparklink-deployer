@@ -106,7 +106,8 @@ def build_xray(config: DeploymentConfig, secret: DeploymentSecrets) -> dict:
 
 def build_sing_box(config: DeploymentConfig, secret: DeploymentSecrets) -> dict:
     inbounds: list[dict] = []
-    if config.profile.active_singbox or "sing-box" in config.profile.standby_cores:
+    wants_anytls = config.profile.has("singbox-anytls") or "sing-box" in config.profile.standby_cores
+    if wants_anytls:
         users = []
         if config.profile.has("egress-native"):
             users.append({"name": "origin-anytls", "password": secret.anytls_origin_password})
@@ -128,7 +129,27 @@ def build_sing_box(config: DeploymentConfig, secret: DeploymentSecrets) -> dict:
                 }
             )
     if config.profile.has("hysteria2"):
-        raise ValueError("hysteria2 is cataloged for Custom but its renderer is reserved for PR3")
+        _require_hy2_secrets(secret)
+        users = []
+        if config.profile.has("egress-native"):
+            users.append({"name": "origin-hy2", "password": secret.hy2_origin_password})
+        if config.profile.has("egress-hytru-warp"):
+            users.append({"name": "hytru-hy2", "password": secret.hy2_hytru_password})
+        inbounds.append(
+            {
+                "type": "hysteria2",
+                "tag": "hysteria2-in",
+                "listen": "::",
+                "listen_port": config.ports.hysteria2,
+                "users": users,
+                "obfs": {"type": "salamander", "password": secret.hy2_obfs_password},
+                "tls": {
+                    "enabled": True,
+                    "certificate_path": "/etc/sparklink/tls/fullchain.pem",
+                    "key_path": "/etc/sparklink/tls/privkey.pem",
+                },
+            }
+        )
     outbounds = [{"type": "direct", "tag": "direct"}]
     rules: list[dict] = []
     if config.profile.requires_warp:
@@ -142,7 +163,9 @@ def build_sing_box(config: DeploymentConfig, secret: DeploymentSecrets) -> dict:
             }
         )
         if config.profile.has("egress-hytru-warp"):
-            rules.append({"auth_user": ["hytru-anytls"], "action": "route", "outbound": "warp"})
+            rules.append({"inbound": ["anytls-in"], "auth_user": ["hytru-anytls"], "action": "route", "outbound": "warp"})
+    if config.profile.has("hysteria2") and config.profile.has("egress-hytru-warp"):
+        rules.append({"inbound": ["hysteria2-in"], "auth_user": ["hytru-hy2"], "action": "route", "outbound": "warp"})
     return {
         "log": {"level": "info", "timestamp": True},
         "inbounds": inbounds,
@@ -396,7 +419,16 @@ def build_client_links(config: DeploymentConfig, secret: DeploymentSecrets) -> l
         if config.profile.has("egress-hytru-warp"):
             links.append(_vless_uri(secret.cdn_hytru_uuid, config.host.cdn_domain, 443, cdn_common, f"{config.host.name}-HyTru-CDN"))
     if config.profile.has("hysteria2"):
-        raise ValueError("hysteria2 client delivery is reserved for PR3")
+        _require_hy2_secrets(secret)
+        query = {
+            "sni": config.host.direct_domain,
+            "obfs": "salamander",
+            "obfs-password": secret.hy2_obfs_password,
+        }
+        if config.profile.has("egress-native"):
+            links.append(_hy2_uri(secret.hy2_origin_password, config.host.direct_domain, config.ports.hysteria2, query, f"{config.host.name}-Origin-HY2"))
+        if config.profile.has("egress-hytru-warp"):
+            links.append(_hy2_uri(secret.hy2_hytru_password, config.host.direct_domain, config.ports.hysteria2, query, f"{config.host.name}-HyTru-HY2"))
     return links
 
 
@@ -457,6 +489,17 @@ def _vless_uri(identity: str, host: str, port: int, query: dict[str, str], label
 
 def _anytls_uri(password: str, host: str, port: int, query: str, label: str) -> str:
     return f"anytls://{quote(password, safe='')}@{host}:{port}?{query}#{quote(label, safe='')}"
+
+
+def _hy2_uri(password: str, host: str, port: int, query: dict[str, str], label: str) -> str:
+    encoded = urlencode(query, quote_via=quote, safe="")
+    return f"hysteria2://{quote(password, safe='')}@{host}:{port}/?{encoded}#{quote(label, safe='')}"
+
+
+def _require_hy2_secrets(secret: DeploymentSecrets) -> None:
+    values = (secret.hy2_origin_password, secret.hy2_hytru_password, secret.hy2_obfs_password)
+    if not all(values) or min(len(value) for value in values) < 32:
+        raise ValueError("Hysteria2 requires generated origin, HyTru, and obfuscation secrets")
 
 
 def _json(value: object) -> str:

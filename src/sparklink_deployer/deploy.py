@@ -36,6 +36,7 @@ MANAGED_SERVICES = (
     "nginx.service",
     "sparklink-wireproxy.service",
     "sparklink-wireproxy-watchdog.timer",
+    "certbot.timer",
 )
 
 
@@ -47,6 +48,7 @@ def install(config: DeploymentConfig, project_root: Path, assume_yes: bool) -> s
 
     preflight = run_preflight(config, strict_host=True)
     preflight.require_ok()
+    firewall_was_active = _ufw_is_active()
     transaction = Transaction(BACKUP_BASE)
     staging = STATE_BASE / "staging" / transaction.transaction_id
     staging.mkdir(parents=True, mode=0o700)
@@ -85,7 +87,10 @@ def install(config: DeploymentConfig, project_root: Path, assume_yes: bool) -> s
 
         secure_stage = staging / "secure"
         secure_stage.mkdir(mode=0o700)
-        private_key, public_key = generate_reality_keypair(Path("/usr/local/bin/xray"))
+        if config.profile.requires_xray:
+            private_key, public_key = generate_reality_keypair(Path("/usr/local/bin/xray"))
+        else:
+            private_key, public_key = "", ""
         secrets = DeploymentSecrets.generate(private_key, public_key)
         secrets_path = secure_stage / "secrets.json"
         secrets.write(secrets_path)
@@ -148,7 +153,7 @@ def install(config: DeploymentConfig, project_root: Path, assume_yes: bool) -> s
         _stop_managed_services()
         transaction.rollback()
         subprocess.run(["systemctl", "daemon-reload"], check=False)
-        subprocess.run(["ufw", "reload"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _restore_ufw_state(firewall_was_active)
         raise
 
 
@@ -403,8 +408,13 @@ def _activate_services(config: DeploymentConfig) -> None:
         services.append("sparklink-wireproxy-watchdog.timer")
     if config.profile.requires_certificate:
         services.append("certbot.timer")
+    if "nginx.service" in services:
+        services.remove("nginx.service")
+        subprocess.run(["systemctl", "enable", "--now", "nginx.service"], check=True)
     if services:
         subprocess.run(["systemctl", "enable", "--now", *services], check=True)
+    if config.profile.has("cdn-vless-ws"):
+        subprocess.run(["systemctl", "reload", "nginx.service"], check=True)
     if not config.profile.active_singbox and "sing-box" in config.profile.standby_cores:
         subprocess.run(["systemctl", "disable", "--now", "sing-box.service"], check=False)
 
@@ -423,3 +433,15 @@ def _record_packages(path: Path) -> None:
     )
     path.write_text(completed.stdout, encoding="utf-8")
     os.chmod(path, 0o600)
+
+
+def _ufw_is_active() -> bool:
+    completed = subprocess.run(["ufw", "status"], capture_output=True, text=True, check=False)
+    return completed.returncode == 0 and any(
+        line.strip().lower() == "status: active" for line in completed.stdout.splitlines()
+    )
+
+
+def _restore_ufw_state(was_active: bool) -> None:
+    command = ["ufw", "--force", "enable"] if was_active else ["ufw", "disable"]
+    subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

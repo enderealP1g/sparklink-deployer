@@ -8,9 +8,9 @@
 - WARP account token, device identity, private key, and WireProxy configuration.
 - Cloudflare API tokens, private subscription URLs, certificates, and VPS backups.
 
-Private repository visibility is defense in depth, not permission to commit these assets.
-The repository secret scanner also rejects the production domain suffix from the source
-tree so historical hostnames cannot accidentally return in examples.
+Repository visibility is not a security boundary and is never permission to commit these
+assets. The repository secret scanner also rejects the production domain suffix from the
+source tree so historical hostnames cannot accidentally return in examples.
 
 ## Installation trust
 
@@ -34,3 +34,7 @@ tree so historical hostnames cannot accidentally return in examples.
   not override configuration without an interactive recommendation confirmation.
 - Future VeilShift Cloudflare credentials remain local-controller-only. They must never be
   copied to a VPS, accepted as a command-line argument, logged, or committed.
+- Existing-host inventory is operator-side and redacted. It may contain host labels,
+  provider names, listener ports, and config fingerprints, but never SSH keys, UUIDs,
+  passwords, WARP tokens, subscription material, or Cloudflare credentials. Inventory
+  collection is read-only; migration requires an explicit per-host approval gate.

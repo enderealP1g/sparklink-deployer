@@ -13,10 +13,12 @@ The default Recommended profile is:
   or delivered as a default public entry.
 
 CDN VLESS/WebSocket, active AnyTLS, and Hysteria2 are Custom capabilities. CDN is an
-optional fallback on the same VPS, not host-level failover. Hysteria2 is cataloged for
-Custom but its portable renderer remains reserved for the next capability PR.
+optional fallback on the same VPS, not host-level failover. Hysteria2 is Custom-only and
+renders a parameterized sing-box UDP/QUIC listener with separate Native/HyTru identities;
+real client and reboot acceptance is still required before production use.
 
-Version 0.3 adds capability profiles on top of the REALITY target-selection extension. It
+Version 0.4 adds capability profiles, Custom HY2 rendering, and read-only existing-host
+inventory/adoption planning on top of the REALITY target-selection extension. It
 can scan candidate SNI targets
 from the user's computer, scan them again from the VPS, combine both reports, and let the
 user accept the recommendation, enter a hostname manually, or keep the configured default.
@@ -25,12 +27,14 @@ user accept the recommendation, enter a hostname manually, or keep the configure
 
 This repository is an alpha implementation extracted from deployments that were
 individually validated. The local renderer, model checks, secret boundaries, and tests
-are ready. Production installation remains gated on a disposable fresh VPS acceptance
-run and a full reboot retest.
+are ready. The first disposable fresh-host acceptance for `hypro02` completed with a
+full reboot retest; broader production use and each additional host remain gated on
+their own evidence.
 
-The current installer still refuses to adopt an existing x-ui/3x-ui, Xray, sing-box, or
-custom Nginx installation. A future `adopt-plan` workflow will inspect only known
-SparkLink host layouts before any approved migration.
+The current installer still refuses to mutate an existing x-ui/3x-ui, Xray, sing-box, or
+custom Nginx installation. The read-only `inventory-collect` and `adopt-plan` commands can
+now record recognized host layouts, report capability gaps, and write a redacted local host
+inventory. A future `adopt-apply` remains frozen and, if ever approved, must be per-host.
 
 ## Safe workflow
 
@@ -69,15 +73,34 @@ SparkLink host layouts before any approved migration.
 6. If CDN was selected, proxy only the CDN hostname and apply its hostname-scoped
    Strict TLS, origin-port, and cache-bypass rules from Windows.
 7. Run server verification, reboot, then run verification again from a new SSH session.
-8. Review the redacted node descriptor at `/var/lib/sparklink/public/node-descriptor.json`
+8. Review the redacted Deployer node descriptor at `/var/lib/sparklink/public/node-descriptor.json`
    and import only the generated private delivery entries into an isolated client profile.
+
+For an existing known host, collect only redacted facts through its normal Windows SSH
+alias, then review the local plan. These commands do not restart services or write to the
+VPS:
+
+```powershell
+python -m sparklink_deployer.cli inventory-collect --target racknerd-admin `
+  --name racknerd-ny-01 --provider RackNerd --output build\inventory\racknerd.inventory.json `
+  --inventory-root .
+python -m sparklink_deployer.cli adopt-plan `
+  --inventory build\inventory\racknerd.inventory.json `
+  --output build\inventory\racknerd.adopt-plan.json `
+  --inventory-root .
+python -m sparklink_deployer.cli inventory-status --inventory-root .
+```
 
 See [REALITY target selection](docs/reality-sni.md) for scoring and limitations. Future
 VeilShift™ controller boundaries are documented in [the roadmap](docs/veilshift-roadmap.md);
 Cloudflare Global API Key reading is intentionally not implemented in this release.
 
+Product vocabulary and system boundaries are consolidated in [docs/product](docs/product/README.md);
+they intentionally reserve Control Plane schema and orchestration design for a future product phase.
+
 See `docs/architecture.md`, `docs/cloudflare-manual.md`, and `docs/runbook.md` before a
-real deployment.
+real deployment. The dated [fresh-host acceptance record](docs/acceptance/2026-08-29_HYPRO02_FRESH_HOST_ACCEPTANCE.md)
+contains the evidence and remaining limits for the first accepted candidate.
 
 ## Security boundaries
 
@@ -90,7 +113,7 @@ real deployment.
 - Release versions are pinned. Release archives must match the upstream checksum file.
 - The installer creates a transaction journal and rollback bundle before it activates
   services.
-- `node-descriptor.json` is public and credential-free; it records selected capabilities,
+- `node-descriptor.json` is a public, credential-free Deployer artifact; it records selected capabilities,
   primary/standby cores, egress semantics, versions, health state, and metering readiness.
 
 ## Development checks
